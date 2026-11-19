@@ -214,7 +214,7 @@
 
 ### 修好的洞
 
-`MaxCupsPerSession` 检查 `session.total_cups + quantity`。10 杯 + 10 杯的第二单被拒，订单夹仍为 10 杯。
+`MaxCupsPerSession` 检查 `session.total_cups + quantity`。10 杯 + 10 杯的第二单被拒，订单夹仍为 10 杯。状态层的 `SessionState.find_order` 已隔离，跨 session 查不到对方订单；`order_status` 只读工具本身尚未注册。
 
 ### 留给学习者的 review 问题
 
