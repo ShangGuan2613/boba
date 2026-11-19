@@ -12,70 +12,71 @@
   <header class="lesson-header">
     <p class="eyebrow">Boba · Lesson 06</p>
     <h1>监控录像：出了事，能倒带回放</h1>
-    <p class="lede">trace 记录“到底发生了什么”，eval 证明“修好之后没有再坏”。</p>
+    <p class="lede">trace 是店里的监控录像，eval 是每月一次的消防演练。</p>
     <p class="meta">约 14 分钟 · 前置 <a href="0005-session.html">Lesson 05</a> · <a href="../reference/trace.html">trace 速查</a> · <a href="../reference/harness-map.html">Harness 地图</a></p>
   </header>
 
   <section>
     <h2>1. 没有监控录像，只能靠猜</h2>
-    <p>打烊对账，少了 80 元。店长问前台，前台说：“我按流程点了。”问后厨，后厨说：“我没接到那单。”</p>
+    <p>打烊对账，少了 80 元。</p>
+    <p>店长问前台，前台说：“我按流程点了，单子递进后厨了。”问后厨，后厨说：“我没接到那一单。”</p>
     <p>两个人都不像在撒谎。但没有监控，店长只能猜：是前台漏点？后厨漏做？还是顾客没付？</p>
-    <p>Agent 也一样。循环跑完只留下一句“失败了”，你无法知道是模型没调工具、工具报错、护栏拒绝，还是预算到点。<strong>没有 trace 的运行，等于没有监控录像的店。</strong></p>
+    <p>Agent 也一样。循环跑完只留下一句“失败了”，你不知道是模型没调工具、工具报错、护栏拒绝，还是预算到点。<strong>没有 trace 的运行，等于没有监控录像的店。</strong></p>
+    <p>这一课不教“更聪明的模型”，只教一件事：<strong>把店里发生过的事，按顺序拍下来。</strong></p>
   </section>
 
   <section>
-    <h2>2. trace 是什么：一行一件事</h2>
-    <p>监控录像不写“今天不太对”，它按时间记录每一帧。trace 也按顺序记录每一个事件，一行一条，只追加、不改写。</p>
+    <h2>2. 录像带怎么拍：一个镜头一件事</h2>
+    <p>店里的摄像头不是拍一整天一个模糊的大文件。它按关键时刻分段：开门、前台说话、后厨接单、出杯、打烊。每一段都有时间，按顺序排好。</p>
+    <p>trace 就是这样的录像带。它不写“今天不太对”，它写“第 3 号镜头，前台在 14:32 让后厨做 10 杯”。</p>
 
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>字段</th>
-            <th>回答什么问题</th>
-            <th>例子</th>
+            <th>录像带上的信息</th>
+            <th>店里的话</th>
+            <th>代码里的名字</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><code>seq</code></td>
+            <td>第几号镜头</td>
             <td>这是第几件事？</td>
-            <td><code>1, 2, 3 ...</code></td>
+            <td><code>seq</code></td>
           </tr>
           <tr>
+            <td>几点几分</td>
+            <td>什么时候拍的？</td>
             <td><code>ts</code></td>
-            <td>什么时候发生的？</td>
-            <td><code>1763... .42</code></td>
           </tr>
           <tr>
+            <td>哪一盘带子</td>
+            <td>属于哪一次营业 / 哪一次运行？</td>
             <td><code>run_id</code></td>
-            <td>属于哪一次运行？</td>
-            <td><code>run_20261119_001</code></td>
           </tr>
           <tr>
+            <td>拍的是什么</td>
+            <td>前台说话、后厨接单、店规拒绝、打烊？</td>
             <td><code>type</code></td>
-            <td>发生了什么类型的事？</td>
-            <td><code>tool.call</code></td>
           </tr>
           <tr>
+            <td>画面细节</td>
+            <td>谁、几杯、成没成？</td>
             <td><code>data</code></td>
-            <td>细节是什么？</td>
-            <td><code>{"tool": "order_create", "quantity": 10}</code></td>
           </tr>
         </tbody>
       </table>
     </div>
 
-    <p>格式用 JSONL：一行一个 JSON。好处很土但很实用——能直接 <code>grep</code>、能按 <code>run_id</code> 过滤、能原样回放。</p>
-
-    <pre><code>{"seq": 1, "ts": 1.0, "run_id": "run_1", "type": "run.start", "data": {"user": "3 号桌要 20 杯"}}
-{"seq": 2, "ts": 1.1, "run_id": "run_1", "type": "model.turn", "data": {"text": "拆成两单"}}
-{"seq": 3, "ts": 1.2, "run_id": "run_1", "type": "tool.call", "data": {"tool": "order_create", "quantity": 10}}</code></pre>
+    <div class="callout callout--key">
+      <p><strong>录像带只往后拍，不能倒回去改。</strong>旧镜头被改过，录像就不再是证据。这就是 trace 的“只追加、不改写”（append-only）。</p>
+    </div>
   </section>
 
   <section>
     <h2>3. 四种录像，能回答什么</h2>
-    <p>点标签，看同一套事件格式怎么记录不同的事故。注意最后一种：没有 <code>run.end</code> 的 trace。</p>
+    <p>点标签，看同一盘录像带怎么记录不同的事故。注意每一行都是“一个镜头一件事”，不是一整段模糊的日志。</p>
 
     <div class="scenario" id="trace-scenario">
       <div class="scenario-tabs" role="tablist" aria-label="trace 场景">
@@ -86,159 +87,128 @@
       </div>
 
       <div class="scenario-panel is-active" id="t1" role="tabpanel">
-        <h3>正常一单：从头到尾有收尾</h3>
-<pre><code>seq 1  run.start          user="3 号桌要 5 杯"
-seq 2  model.turn         text="下一单"
-seq 3  tool.call          tool="order_create", quantity=5
-seq 4  tool.result        is_error=false
-seq 5  state.write        total_cups=5
-seq 6  run.end            status="ok"</code></pre>
-        <p class="scenario-next"><strong>能回答：</strong>谁点的、调了什么、成没成、状态写没写、最后是不是正常结束。</p>
+        <h3>正常一单：从头到尾都有镜头</h3>
+<pre><code>01  开门     3 号桌要 5 杯
+02  前台     下一单，5 杯
+03  后厨     接单 order_create × 5
+04  出杯     成功
+05  记账     订单夹合计 5 杯
+06  打烊     状态 ok</code></pre>
+        <p class="scenario-next"><strong>能回答：</strong>谁点的、前台说了什么、后厨做没做、账记没记、最后是不是正常打烊。</p>
       </div>
 
       <div class="scenario-panel" id="t2" role="tabpanel">
-        <h3>拆单被拒：拒绝也有记录</h3>
-<pre><code>seq 1  run.start          user="3 号桌要 20 杯"
-seq 2  model.turn         text="拆成两单"
-seq 3  tool.call          tool="order_create", quantity=10
-seq 4  tool.result        is_error=false
-seq 5  state.write        total_cups=10
-seq 6  tool.call          tool="order_create", quantity=10
-seq 7  guardrail.denied   code="permission_denied"
-seq 8  tool.result        is_error=true
-seq 9  run.end            status="permission_denied"</code></pre>
-        <p class="scenario-next"><strong>能回答：</strong>不是“工具坏了”，是第二单被 session 级护栏拦下；第一单已经成功，状态停在 10 杯。</p>
+        <h3>拆单被拒：拒绝也要拍下来</h3>
+<pre><code>01  开门     3 号桌要 20 杯
+02  前台     拆成两单，每单 10 杯
+03  后厨     接第一单 order_create × 10
+04  出杯     成功
+05  记账     订单夹合计 10 杯
+06  后厨     接第二单 order_create × 10
+07  店规     拒绝：本桌已有 10 杯，再加会超
+08  前台     告诉顾客：本次最多 10 杯
+09  打烊     状态 permission_denied</code></pre>
+        <p class="scenario-next"><strong>能回答：</strong>不是“工具坏了”，是第二单被店规拦下；第一单已经成功，账停在 10 杯。没有这条店规镜头，事后只会看到“失败了”。</p>
       </div>
 
       <div class="scenario-panel" id="t3" role="tabpanel">
-        <h3>预算超时：时间去哪了</h3>
-<pre><code>seq 1  run.start
-seq 2  model.turn
-seq 3  tool.call          tool="inventory_check"
-seq 4  tool.result        is_error=true, code="tool_failed"
-seq 5  model.turn
-seq 6  tool.call          tool="inventory_check"
-seq 7  tool.result        is_error=true, code="tool_failed"
-seq 8  run.end            status="timeout"</code></pre>
-        <p class="scenario-next"><strong>能回答：</strong>模型在重试同一个失败工具；超时不是模型“笨”，是循环没有在失败后换策略。预算和 trace 一起看，才知道该改哪。</p>
+        <h3>预算超时：时间到底花在哪</h3>
+<pre><code>01  开门
+02  前台     问冰箱还有没有珍珠
+03  后厨     冰箱传感器离线
+04  前台     再问一次
+05  后厨     还是离线
+06  前台     再问一次
+07  打烊     状态 timeout</code></pre>
+        <p class="scenario-next"><strong>能回答：</strong>不是模型“笨”，是它一直在重试同一个失败的查询。预算和录像一起看，才知道该改的是“失败后换策略”，不是“换个更聪明的模型”。</p>
       </div>
 
       <div class="scenario-panel" id="t4" role="tabpanel">
-        <h3>没写完的录像：没有 run.end</h3>
-<pre><code>seq 1  run.start
-seq 2  model.turn
-seq 3  tool.call          tool="order_create", quantity=10
-seq 4  tool.result        is_error=false
-（没有 seq 5）</code></pre>
-        <p class="scenario-next"><strong>能回答：</strong>这次运行没有正常收尾。可能进程崩了、机器重启了，或者停止路径漏了 <code>run.end</code>。<code>status()</code> 会返回 <code>incomplete</code>，这本身就是信号。</p>
+        <h3>没写完的录像：没有打烊镜头</h3>
+<pre><code>01  开门
+02  前台     下一单 10 杯
+03  后厨     出杯成功
+04  记账     订单夹合计 10 杯
+（录像到这里断了）</code></pre>
+        <p class="scenario-next"><strong>能回答：</strong>这次营业没有正常打烊。可能停电了、机器重启了，或者收尾流程漏了“打烊”这一步。系统会说 <code>incomplete</code>，这本身就是信号，不能当成成功。</p>
       </div>
     </div>
   </section>
 
   <section>
-    <h2>4. 代码：只追加，不改写</h2>
-    <p><code>Trace.emit</code> 只做一件事：给事件编号、打时间戳、塞进列表。没有复杂逻辑，才不容易把观测代码本身写出 bug。</p>
+    <h2>4. 录像机怎么装：其实只有两个按钮</h2>
+    <p>店长不需要懂摄像机电路。他只需要两个按钮：<strong>拍一下</strong>，和<strong>看有没有打烊</strong>。trace 的核心也就这两件事。</p>
 
-<pre><code>@dataclass(frozen=True)
-class TraceEvent:
-    seq: int
-    ts: float
-    run_id: str
-    type: str
-    data: dict
+    <h3>按钮一：拍一下</h3>
+    <p>每发生一件事，就追加一个镜头。编号自动加一，时间自动记上，带子编号沿用这次运行的：</p>
 
-class Trace:
-    def __init__(self, run_id, clock=time.time):
-        self.run_id = run_id
-        self._clock = clock
-        self.events = []
+<pre><code>def emit(event_type, **data):
+    events.append({
+        "seq": len(events) + 1,   # 第几号镜头
+        "ts": now(),              # 几点几分
+        "run_id": run_id,         # 哪一盘带子
+        "type": event_type,       # 拍的是什么
+        "data": data,             # 画面细节
+    })</code></pre>
 
-    def emit(self, event_type, **data):
-        event = TraceEvent(
-            seq=len(self.events) + 1,
-            ts=self._clock(),
-            run_id=self.run_id,
-            type=event_type,
-            data=data,
-        )
-        self.events.append(event)
-        return event</code></pre>
+    <p>就这些。没有“智能分析”，没有“自动总结”，先保证事实被按顺序记下来。</p>
 
-    <p>落盘用 JSONL；读回来时保持原来的顺序：</p>
+    <h3>按钮二：看有没有打烊</h3>
+    <p>一盘录像带正不正常，不看中间多热闹，看最后有没有“打烊”这个镜头：</p>
 
-<pre><code>def to_jsonl(self):
-    return "\n".join(
-        json.dumps(asdict(e), ensure_ascii=False)
-        for e in self.events
-    )
-
-@classmethod
-def from_jsonl(cls, text):
-    events = [
-        TraceEvent(**json.loads(line))
-        for line in text.splitlines()
-        if line.strip()
-    ]
-    trace = cls(events[0].run_id if events else "")
-    trace.events = events
-    return trace</code></pre>
-
-    <p>收尾状态只看最后一条 <code>run.end</code>。没有它，就说明这次运行没写完：</p>
-
-<pre><code>def status(self):
-    for event in reversed(self.events):
-        if event.type == "run.end":
-            return event.data.get("status") or "error"
+<pre><code>def status():
+    for event in reversed(events):
+        if event["type"] == "run.end":
+            return event["data"]["status"]
     return "incomplete"</code></pre>
 
-    <p><code>summary()</code> 再把事件数成几张牌：模型几轮、工具几次、拒绝几次、错误几次、花了多久。排障先看 summary，再下钻到具体 <code>seq</code>。</p>
+    <p>最后一条是 <code>run.end</code>，就用它里面的状态；一条都没有，就是 <code>incomplete</code>。不要默认成功。</p>
 
     <div class="callout">
-      <p><strong>完整可运行代码：</strong><code>boba/trace.py</code>。测试覆盖编号、JSONL 往返、状态、缺 <code>run.end</code>、summary、文件读写等。在仓库根目录跑：</p>
-      <pre><code>python3 -m unittest discover -s tests -v
-python3 -m boba.trace</code></pre>
+      <p><strong>完整实现：</strong><code>boba/trace.py</code>。课程里只保留两个按钮；JSONL 落盘、读回、summary 这些细节在速查页和代码里，先不用背。</p>
     </div>
   </section>
 
   <section>
-    <h2>5. eval：把录像变成回归测试</h2>
-    <p>trace 解决“这一次发生了什么”；eval 解决“下一次还会不会坏”。</p>
-    <p>一个 eval case 很简单：固定输入跑一遍，拿到 trace，断言收尾状态等于预期。</p>
+    <h2>5. eval：每月一次的消防演练</h2>
+    <p>店里不能等真着火了才试灭火器。每月固定演练几个场景：厨房起火、门口堵住、顾客晕倒。看店员是不是还按流程走。</p>
+    <p>eval 就是 Agent 的消防演练：固定几个场景，跑一遍，看结果是不是符合预期。</p>
 
-<pre><code>@dataclass(frozen=True)
-class EvalCase:
-    name: str
-    expected_status: str
-    trace: Trace
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>演练场景</th>
+            <th>期望结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>正常下一单 5 杯</td>
+            <td><code>ok</code></td>
+          </tr>
+          <tr>
+            <td>拆成两单各 10 杯</td>
+            <td><code>permission_denied</code></td>
+          </tr>
+          <tr>
+            <td>工具一直失败，预算耗尽</td>
+            <td><code>timeout</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-def run_eval(cases):
-    results = []
-    for case in cases:
-        actual = case.trace.status()
-        results.append(EvalResult(
-            name=case.name,
-            ok=actual == case.expected_status,
-            expected=case.expected_status,
-            actual=actual,
-        ))
-    return results</code></pre>
-
-    <p>例如：</p>
-
-<pre><code>EvalCase("正常下单", "ok", ok_trace)
-EvalCase("超量被拦", "permission_denied", denied_trace)
-EvalCase("预算耗尽", "timeout", timeout_trace)</code></pre>
-
-    <p>以后每次改护栏、改预算、改状态，都先跑一遍。<strong>没有 eval 的“修好了”，只是你觉得修好了。</strong></p>
+    <p>以后每次改护栏、改预算、改状态，都先跑一遍这些演练。<strong>trace 是录像，eval 是拿录像对照演练脚本。</strong>没有 eval 的“修好了”，只是你觉得修好了。</p>
   </section>
 
   <section>
-    <h2>6. trace 的四条硬规矩</h2>
+    <h2>6. 录像带的四条店规</h2>
     <ol>
-      <li><strong>只追加，不改写。</strong>旧事件被改过，录像就不再是证据。</li>
-      <li><strong>一行一件事。</strong>不要把整段对话塞进一个模糊的 <code>message</code>；排障时要能按 <code>seq</code> 定位。</li>
-      <li><strong>每次运行有 <code>run_id</code>，结束有 <code>run.end</code>。</strong>没有收尾就是 <code>incomplete</code>，不要假装成功。</li>
-      <li><strong>落盘前脱敏。</strong>trace 会保存很久；密码、手机号、支付信息不能原样写进去。</li>
+      <li><strong>只往后拍，不改旧带。</strong>旧镜头被改过，录像就不再是证据。</li>
+      <li><strong>一个镜头一件事。</strong>不要把整段对话塞进一个模糊的“备注”；排障时要能按编号定位。</li>
+      <li><strong>每次营业一盘带，打烊必须有镜头。</strong>没有 <code>run.end</code> 就是 <code>incomplete</code>，不要假装成功。</li>
+      <li><strong>存档前打码。</strong>录像会保存很久；手机号、地址、支付信息不能原样拍进去。</li>
     </ol>
   </section>
 
@@ -256,7 +226,7 @@ EvalCase("预算耗尽", "timeout", timeout_trace)</code></pre>
       <p class="feedback" aria-live="polite"></p>
     </div>
 
-    <div class="quiz" data-answer="1" data-hint="再想一步：录像被改过，就不能当证据。" data-explanation="trace 必须 append-only：只追加新事件，不改旧事件。覆盖旧文件或只写最后结果，都会丢掉排障需要的顺序。">
+    <div class="quiz" data-answer="1" data-hint="再想一步：录像被改过，就不能当证据。" data-explanation="trace 必须 append-only：只追加新镜头，不改旧镜头。覆盖旧文件或只写最后结果，都会丢掉排障需要的顺序。">
       <p class="question">2. trace 应该怎么写入？</p>
       <div class="options">
         <button class="option" type="button">每次覆盖旧文件</button>
@@ -266,12 +236,12 @@ EvalCase("预算耗尽", "timeout", timeout_trace)</code></pre>
       <p class="feedback" aria-live="polite"></p>
     </div>
 
-    <div class="quiz" data-answer="2" data-hint="再想一步：eval 管的是“下一次”。" data-explanation="eval 用固定用例回归：每次改动后重跑，确认旧能力没退化。它不能替代 trace，也不负责让模型更聪明。">
-      <p class="question">3. eval 的作用是？</p>
+    <div class="quiz" data-answer="2" data-hint="再想一步：eval 管的是“下一次”。" data-explanation="eval 用固定场景回归：每次改动后重跑，确认旧能力没退化。它不能替代 trace，也不负责让模型更聪明。">
+      <p class="question">3. eval 最像店里的什么？</p>
       <div class="options">
-        <button class="option" type="button">让模型更聪明</button>
-        <button class="option" type="button">替代 trace 记录</button>
-        <button class="option" type="button">用固定用例回归</button>
+        <button class="option" type="button">更聪明的店员</button>
+        <button class="option" type="button">更快的收银机</button>
+        <button class="option" type="button">每月消防演练</button>
       </div>
       <p class="feedback" aria-live="polite"></p>
     </div>
@@ -290,12 +260,12 @@ EvalCase("预算耗尽", "timeout", timeout_trace)</code></pre>
   <section>
     <h2>8. 这一课没修的设备</h2>
     <ul>
-      <li><strong>还没接进真正的循环</strong>：现在是手动 <code>emit</code>；下一步要在模型轮、工具执行、护栏拒绝、状态写入处自动记录。</li>
-      <li><strong>日志轮转</strong>：trace 会越写越大；需要按天 / 按大小切分，设置保留期。</li>
-      <li><strong>采样</strong>：不是每次运行都要全量落盘；高频场景要采样，但失败运行必须保留。</li>
-      <li><strong>eval 用例太少</strong>：现在只有演示 case；需要从真实失败 trace 里沉淀。</li>
-      <li><strong>脱敏</strong>：还没有手机号、地址、支付信息的过滤规则。</li>
-      <li><strong>并发与归档</strong>：留到第 7 课，先把 trace / eval 跑通。</li>
+      <li><strong>还没接进真正的循环</strong>：现在是手动“拍一下”；下一步要在前台说话、后厨接单、店规拒绝、记账时自动拍。</li>
+      <li><strong>录像带会越堆越多</strong>：需要按天 / 按大小切分，设置保留期。</li>
+      <li><strong>不是每次都要全拍</strong>：高频场景可以抽样，但失败的运行必须保留。</li>
+      <li><strong>演练场景太少</strong>：现在只有演示 case；要从真实失败的录像里沉淀。</li>
+      <li><strong>打码规则还没有</strong>：手机号、地址、支付信息还没过滤。</li>
+      <li><strong>并发与归档</strong>：留到第 7 课，先把录像和演练跑通。</li>
     </ul>
     <p>下一课：<strong>并发与状态生命周期</strong>。两台收银机同时下单、订单夹持久化与归档。</p>
   </section>
@@ -303,7 +273,7 @@ EvalCase("预算耗尽", "timeout", timeout_trace)</code></pre>
   <footer class="lesson-footer">
     <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a>，重点读 Factor 8 “Own your control flow”。trace 是控制流的黑匣子；eval 是对控制流的回归。</p>
     <p><strong>延伸：</strong><a href="https://openai.com/index/harness-engineering/" rel="noopener">OpenAI · Harness Engineering</a>，看“可观测性”如何把失败从猜测变成证据。</p>
-    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：你觉得 trace 应该由每个组件自己写，还是由 Harness 统一写？如果只能保留一种事件，你留哪个？下一课从你的选择开始。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：你觉得录像应该由每个岗位自己拍，还是由店长统一拍？如果只能保留一种镜头，你留哪个？下一课从你的选择开始。</p>
   </footer>
 
 </main>
