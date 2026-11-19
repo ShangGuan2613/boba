@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 01 · 一杯奶茶的 Agent 闭环</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="lesson">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Lesson 01</p>
+    <h1>一杯奶茶的 Agent 闭环</h1>
+    <p class="lede">模型只会“说”，Harness 才会“做”。这一课只做一件事：让模型拿到真实菜单，而不是编一份。</p>
+    <p class="meta">约 12 分钟 · 前置：无 · <a href="../reference/harness-map.html">Harness 地图</a> · <a href="../README.md">课程说明</a></p>
+  </header>
+
+  <section>
+    <h2>1. 先看一个失败</h2>
+    <p>你开了一家奶茶店，接了一个“智能点单”对话。顾客问：</p>
+    <blockquote>
+      <p>“今天有什么？”</p>
+    </blockquote>
+    <p>如果只把这句话丢给模型，它很可能回你：</p>
+    <blockquote class="failure">
+      <p>“今天有珍珠奶茶、芝士莓莓、四季春，都是 15 元。”</p>
+      <cite>句子很顺，但价格是编的——模型没有看过你的菜单。</cite>
+    </blockquote>
+    <p>这不是模型“笨”。它本来就没有菜单、库存、订单这些数据。它只根据上下文生成下一个 token。<strong>要让它说真话，得有人把真实数据递到它面前。</strong></p>
+  </section>
+
+  <section>
+    <h2>2. 模型之外，还缺一层东西</h2>
+    <p>把模型想象成店员：会说话、会判断顾客意图，但不知道今天冰箱里还剩多少珍珠。要让店员真正出杯，你还需要菜单、设备、店规和店长。</p>
+    <p>这些“模型之外的一切”，就是 <strong>Harness</strong>。一个常见的说法是：</p>
+    <div class="formula">
+      <span class="model">Agent</span>
+      <span class="plus">=</span>
+      <span class="model">Model</span>
+      <span class="plus">+</span>
+      <span class="harness">Harness</span>
+    </div>
+    <p>Harness 包括循环、工具、上下文、状态、护栏、预算和可观测性。它不是模型的一部分，而是<strong>让模型能安全地作用于世界的那层代码</strong>。<a href="https://blog.langchain.com/the-anatomy-of-a-agent-harness/" rel="noopener">LangChain 的拆解</a>把这个边界讲得很清楚。</p>
+    <div class="split">
+      <div>
+        <h3>模型负责</h3>
+        <ul>
+          <li>理解顾客这句话</li>
+          <li>决定下一步做什么</li>
+          <li>生成对顾客的回复</li>
+        </ul>
+      </div>
+      <div>
+        <h3>Harness 负责</h3>
+        <ul>
+          <li>真的去执行工具</li>
+          <li>把结果送回模型</li>
+          <li>限制它能做多过分的事</li>
+        </ul>
+      </div>
+    </div>
+    <div class="callout callout--key">
+      <p><strong>本课的关键区分：</strong>模型输出“我要调用 <code>get_menu</code>”，不等于它真的调用了。它只是生成了一段结构化的请求；执行发生在 Harness 里。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. 最小闭环，五步</h2>
+    <p>把上面的失败修好，只需要一个循环。点“下一步”，看这杯奶茶怎么从一句话变成真实回答。</p>
+
+    <div class="loop" id="loop">
+      <div class="loop-card is-active" data-caption="顾客问：“今天有什么？” 此时模型只有这句话，没有菜单数据。">
+        <strong>顾客提问</strong>
+        <span>“今天有什么？”</span>
+      </div>
+      <div class="loop-card" data-caption="模型输出一个 tool_use：调用 get_menu。注意：它只是“说”要调用，并没有执行。">
+        <strong>模型决定</strong>
+        <span>输出 tool_use</span>
+      </div>
+      <div class="loop-card" data-caption="Harness 在自己的进程里执行 get_menu()，读到真实菜单。">
+        <strong>Harness 执行</strong>
+        <span>调用 get_menu()</span>
+      </div>
+      <div class="loop-card" data-caption="Harness 把结果包成 tool_result，用 tool_use_id 配对，追加进 messages。">
+        <strong>结果回填</strong>
+        <span>tool_result</span>
+      </div>
+      <div class="loop-card" data-caption="模型带着菜单结果再生成一次。这次它才能说“今天有……”。文本出现，循环结束。">
+        <strong>模型收尾</strong>
+        <span>生成文本</span>
+      </div>
+    </div>
+
+    <div class="loop-controls">
+      <button id="next-step" type="button">下一步</button>
+      <button id="reset-step" class="secondary" type="button">从头</button>
+    </div>
+    <p class="caption" id="loop-caption" aria-live="polite">顾客问：“今天有什么？” 此时模型只有这句话，没有菜单数据。</p>
+  </section>
+
+  <section>
+    <h2>4. 代码形状</h2>
+    <p>先不接真实模型，也不做花活。最小闭环的骨架只有这些：</p>
+
+<pre><code>messages = [user("今天有什么？")]
+
+while True:
+    turn = model(messages)                 # 模型只负责生成
+    messages.append(turn.as_message())
+
+    if turn.type == "text":                # 没有工具请求 → 结束
+        return turn.text
+
+    result = run_tool(turn.name, turn.args)          # Harness 执行
+    messages.append(tool_result(turn.id, result))    # 结果回填</code></pre>
+
+    <p>跑起来以后，trace 大概长这样：</p>
+
+<pre><code>seq 1  model.turn   tool_use  get_menu
+seq 2  tool.result  {"items": [{"name": "珍珠奶茶", "price": 12}, ...]}
+seq 3  model.turn   text      "今天有珍珠奶茶 12 元、芝士莓莓 18 元……"</code></pre>
+
+    <p class="code-note">这段代码还缺很多东西：未知工具怎么办、工具报错怎么办、最多几轮、超时、trace 落盘。它们是后面每一课的主题。</p>
+
+    <div class="callout callout--warn">
+      <p><strong>先别急着加抽象。</strong>Anthropic 在<a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">《Building Effective Agents》</a>里的经验是：成功的实现通常从简单、可组合的模式开始，而不是一上来就套复杂框架。先把这五步跑通，再谈框架。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. 奶茶店 ↔ Harness</h2>
+    <p>同一个东西，用店里的角色再对一遍。以后卡住时，先问：这是店员的事，还是店长的事？</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>奶茶店</th>
+            <th>Harness 里的东西</th>
+            <th>缺了会怎样</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>店员</td>
+            <td>Model</td>
+            <td>不会对话，也不会决定下一步</td>
+          </tr>
+          <tr>
+            <td>菜单 / 配方卡</td>
+            <td>Tools</td>
+            <td>只能凭记忆编价格和库存</td>
+          </tr>
+          <tr>
+            <td>店长</td>
+            <td>Agent loop</td>
+            <td>没人把“点单”推进到“出杯”</td>
+          </tr>
+          <tr>
+            <td>小票</td>
+            <td>Messages / state</td>
+            <td>第二轮就忘了顾客点了什么</td>
+          </tr>
+          <tr>
+            <td>食安红线</td>
+            <td>Guardrails</td>
+            <td>10 杯也照做，库存扣成负数</td>
+          </tr>
+          <tr>
+            <td>监控</td>
+            <td>Trace</td>
+            <td>出错后不知道哪一步坏了</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. 检查理解</h2>
+    <p>先合上上面的内容，凭记忆选。选完才有反馈。</p>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：执行发生在模型之外。" data-explanation="模型只产出 tool_use 请求；真正执行函数、访问库存的是 Harness。">
+      <p class="question">1. 模型说“调用 get_menu”，谁真正执行这个函数？</p>
+      <div class="options">
+        <button class="option" type="button">模型自己执行</button>
+        <button class="option" type="button">门店系统执行</button>
+        <button class="option" type="button">顾客自己执行</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="2" data-hint="再想一步：结果不回填，下一轮模型就看不见。" data-explanation="tool_result 必须回到 messages，下一轮模型才能看见；否则它会重复调用或凭空编。">
+      <p class="question">2. 工具结果为什么必须放回 messages？</p>
+      <div class="options">
+        <button class="option" type="button">让终端日志更好看</button>
+        <button class="option" type="button">让提示词变得更短</button>
+        <button class="option" type="button">让下一轮模型看见</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：生成话术是模型的事。" data-explanation="生成话术是模型的事；是否调用、库存校验和扣减由 Harness 和工具代码负责。">
+      <p class="question">3. 哪件事属于 Harness，而不是 Model？</p>
+      <div class="options">
+        <button class="option" type="button">生成一句道歉话</button>
+        <button class="option" type="button">校验库存并扣减</button>
+        <button class="option" type="button">决定是否调工具</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. 这一课故意没做的事</h2>
+    <ul>
+      <li>没有工具参数校验——顾客说“来一杯”，缺哪个参数？</li>
+      <li>没有未知工具处理——模型编了一个 <code>get_discount</code> 怎么办？</li>
+      <li>没有预算——模型要是永远调工具，谁喊停？</li>
+      <li>没有真实模型——先用假模型把闭环跑通，再接 API。</li>
+    </ul>
+    <p>这些都是真实的坑，但一次只挖一个。下一课从你的追问开始。</p>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">Anthropic · Building Effective Agents</a>。读“When to use agents”和“Appendix 2: Prompt engineering your tools”两节即可，约 10 分钟。</p>
+    <p><strong>延伸：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a>，看 Factor 1–3：own your prompts、own your context window、own your control flow。</p>
+    <p class="ask"><strong>有不清楚的，直接问我。</strong>我是你的教练，不是评分器。把第 3 节的五步用自己的话复述一遍，或者指出这个比喻哪里不准，都是很好的下一步。</p>
+  </footer>
+
+</main>
+
+<script src="../assets/components.js"></script>
+</body>
+</html>

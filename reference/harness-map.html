@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference · Harness 地图与术语</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="reference">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Reference</p>
+    <h1>Harness 地图与术语</h1>
+    <p class="lede">一页纸：Agent 里到底有哪些部件，各自对应奶茶店的什么角色，缺了会出什么事。</p>
+    <p class="meta"><a href="../lessons/0001-agent-loop.html">← Lesson 01</a> · <a href="../README.md">课程说明</a> · 可打印</p>
+  </header>
+
+  <section>
+    <h2>一句话</h2>
+    <div class="formula">
+      <span class="model">Agent</span>
+      <span class="plus">=</span>
+      <span class="model">Model</span>
+      <span class="plus">+</span>
+      <span class="harness">Harness</span>
+    </div>
+    <p>Harness 是“模型之外的一切”：循环、工具、上下文、状态、护栏、预算、观测。模型负责生成，Harness 负责让生成作用于世界，并在出格时喊停。</p>
+  </section>
+
+  <section>
+    <h2>八个部件</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>部件</th>
+            <th>干什么</th>
+            <th>奶茶店对应</th>
+            <th>缺了会怎样</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Loop</strong></td>
+            <td>反复“模型 → 工具 → 模型”，直到文本收尾或预算耗尽</td>
+            <td>店长把点单推进到出杯</td>
+            <td>模型只说不动，或者一次工具后停住</td>
+          </tr>
+          <tr>
+            <td><strong>Model adapter</strong></td>
+            <td>把内部消息格式翻译成模型 API，再把响应翻译回来</td>
+            <td>店员听的方言</td>
+            <td>换模型就要重写业务代码</td>
+          </tr>
+          <tr>
+            <td><strong>Tools</strong></td>
+            <td>可执行的函数：查菜单、查库存、建订单、提交</td>
+            <td>菜单、冰箱、收银机</td>
+            <td>只能凭记忆编价格和库存</td>
+          </tr>
+          <tr>
+            <td><strong>Context</strong></td>
+            <td>这一轮模型能看见的消息、系统提示、工具结果</td>
+            <td>店员眼前的单子</td>
+            <td>信息太多淹没重点，或太少无法决策</td>
+          </tr>
+          <tr>
+            <td><strong>State / Session</strong></td>
+            <td>跨轮保存购物车、订单号、顾客身份</td>
+            <td>小票和订单夹</td>
+            <td>第二轮就忘了顾客点了什么</td>
+          </tr>
+          <tr>
+            <td><strong>Guardrails</strong></td>
+            <td>代码级否决：超量、越权、危险操作</td>
+            <td>食安红线和店规</td>
+            <td>10 杯也照做，库存扣成负数</td>
+          </tr>
+          <tr>
+            <td><strong>Budgets</strong></td>
+            <td>限制轮数、工具调用次数、墙钟时间</td>
+            <td>排队时长和原料上限</td>
+            <td>模型死循环，账单和顾客一起爆炸</td>
+          </tr>
+          <tr>
+            <td><strong>Trace / Evals</strong></td>
+            <td>记录每一步事件；用固定用例回归</td>
+            <td>监控和复盘</td>
+            <td>出错后不知道哪一步坏了，也没法证明修好了</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>最小闭环 vs 工程化</h2>
+    <div class="split">
+      <div>
+        <h3>最小闭环（第 1 课）</h3>
+        <ul>
+          <li>一个 <code>while</code> 循环</li>
+          <li>一个工具</li>
+          <li>消息数组</li>
+          <li>文本即结束</li>
+        </ul>
+      </div>
+      <div>
+        <h3>工程化 Harness（后续）</h3>
+        <ul>
+          <li>未知工具 / 工具报错收敛</li>
+          <li>预算与超时</li>
+          <li>护栏否决也回填 <code>tool_result</code></li>
+          <li>trace 落盘 + 可回归的 eval</li>
+        </ul>
+      </div>
+    </div>
+    <p>顺序不能反。先让五步跑通，再逐个补失败模式；每补一个部件，都要能说出它挡住了哪个具体事故。</p>
+  </section>
+
+  <section>
+    <h2>术语表</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>术语</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>turn</code></td>
+            <td>模型的一次输出。可能是一段文本，也可能是一个或多个工具请求。</td>
+          </tr>
+          <tr>
+            <td><code>tool_use</code></td>
+            <td>模型发出的结构化调用请求：工具名 + 参数 + 唯一 id。它不是执行结果。</td>
+          </tr>
+          <tr>
+            <td><code>tool_result</code></td>
+            <td>Harness 执行后回填的结果，必须用 <code>tool_use_id</code> 与请求配对。</td>
+          </tr>
+          <tr>
+            <td>messages</td>
+            <td>这一轮对话的上下文。工具结果不回填，下一轮模型就看不见。</td>
+          </tr>
+          <tr>
+            <td>harness</td>
+            <td>模型之外的运行层：循环、工具、上下文、状态、护栏、预算、观测。</td>
+          </tr>
+          <tr>
+            <td>guardrail</td>
+            <td>代码级否决，不是提示词建议。被否决也要给模型一个结果。</td>
+          </tr>
+          <tr>
+            <td>budget</td>
+            <td>对轮数、工具调用次数、时间的硬上限。</td>
+          </tr>
+          <tr>
+            <td>trace</td>
+            <td>按顺序记录的事件流，用来复盘一次运行到底发生了什么。</td>
+          </tr>
+          <tr>
+            <td>eval</td>
+            <td>固定输入 + 期望行为的回归集，用来证明改动没有让旧能力退化。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>课程路线</h2>
+    <ol>
+      <li><a href="../lessons/0001-agent-loop.html">01 · 一杯奶茶的 Agent 闭环</a>：模型 → 工具 → 模型。</li>
+      <li>02 · 工具协议：参数、错误、未知工具。</li>
+      <li>03 · 预算：轮数、调用次数、超时。</li>
+      <li>04 · 护栏：代码级否决与库存红线。</li>
+      <li>05 · 状态与 session：小票不能丢。</li>
+      <li>06 · trace 与 eval：出错能复盘，改动能回归。</li>
+    </ol>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>一手来源：</strong><a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">Anthropic · Building Effective Agents</a> · <a href="https://blog.langchain.com/the-anatomy-of-a-agent-harness/" rel="noopener">LangChain · The Anatomy of an Agent Harness</a> · <a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a></p>
+    <p class="ask">这张表是活的。每学一课，回来补一行“缺了会怎样”。</p>
+  </footer>
+
+</main>
+</body>
+</html>
