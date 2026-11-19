@@ -165,6 +165,19 @@
   </section>
 
   <section>
+    <h2>并发与归档</h2>
+    <ul>
+      <li><strong>竞态条件</strong>：两个请求都读到库存 15，各自扣 10，最后卖成 20。读 → 检查 → 写不是原子动作。</li>
+      <li><strong>锁</strong>：同一份状态只有一把“夹子”，拿到才能读改；其他人等。</li>
+      <li><strong>死锁</strong>：多个锁的获取顺序不一致，互相等待；所有代码统一顺序，或用原子条件更新。</li>
+      <li><strong>原子扣减</strong>：<code>UPDATE ... SET stock = stock - n WHERE stock &gt;= n</code>，把读、检查、写合成一步。</li>
+      <li><strong>持久化</strong>：状态从内存落到数据库 / 文件，重启不丢。</li>
+      <li><strong>归档</strong>：会话结束把订单夹移走；护栏只算当前会话，除非规则按人 / 按天。</li>
+      <li><strong>规则范围 = session 身份</strong>：按桌号，换桌就重置；按人限购，必须用会员号 / 日期做 key。</li>
+    </ul>
+  </section>
+
+  <section>
     <h2>常见 Bug</h2>
     <div class="table-wrap">
       <table>
@@ -205,6 +218,16 @@
             <td>重启后订单全没了</td>
             <td>状态只在内存</td>
             <td>落库 / 持久化</td>
+          </tr>
+          <tr>
+            <td>库存卖成负数</td>
+            <td>读-检查-写被并发插队</td>
+            <td>锁或原子条件更新</td>
+          </tr>
+          <tr>
+            <td>换桌就绕过限购</td>
+            <td>规则按人，session 按桌</td>
+            <td>session key 用会员号 / 日期，或查汇总</td>
           </tr>
         </tbody>
       </table>
