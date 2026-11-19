@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference · 工具协议速查</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="reference">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Reference</p>
+    <h1>工具协议速查</h1>
+    <p class="lede">一页纸：每个 <code>tool_use</code> 怎么回填、错误码怎么选、模型下一步该做什么。</p>
+    <p class="meta"><a href="../lessons/0002-tool-protocol.html">← Lesson 02</a> · <a href="../lessons/0001-agent-loop.html">Lesson 01</a> · <a href="harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>不变量</h2>
+    <div class="formula">
+      1 个 <span class="model">tool_use</span>
+      <span class="plus">→</span>
+      1 个 <span class="harness">tool_result</span>
+    </div>
+    <p><strong>成功是结果，失败也是结果。</strong>未知工具、缺参数、工具异常、护栏否决、预算耗尽，都必须回填；不能抛到循环外。每个结果都要带同一个 <code>tool_use_id</code>。</p>
+  </section>
+
+  <section>
+    <h2>结果形状</h2>
+    <div class="split">
+      <div>
+        <h3>成功</h3>
+<pre><code>{
+  "tool_use_id": "call_4",
+  "is_error": false,
+  "content": {
+    "ok": true,
+    "data": { ... }
+  }
+}</code></pre>
+      </div>
+      <div>
+        <h3>失败</h3>
+<pre><code>{
+  "tool_use_id": "call_1",
+  "is_error": true,
+  "content": {
+    "ok": false,
+    "error": {
+      "code": "missing_argument",
+      "message": "...",
+      "hint": "..."
+    }
+  }
+}</code></pre>
+      </div>
+    </div>
+    <p class="code-note">这是 Harness 内部对象。发给真实 API 时，<code>content</code> 会序列化为字符串或内容块，但 id 配对与 <code>is_error</code> 的语义不变。</p>
+  </section>
+
+  <section>
+    <h2>错误码</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>code</th>
+            <th>触发</th>
+            <th>模型下一步</th>
+            <th>不要做</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>missing_argument</code></td>
+            <td>必填参数没给</td>
+            <td>问顾客缺的那一项</td>
+            <td>猜默认值硬做</td>
+          </tr>
+          <tr>
+            <td><code>unknown_argument</code></td>
+            <td>给了没声明的参数</td>
+            <td>删掉或改正参数后重发</td>
+            <td>把多余参数传给工具</td>
+          </tr>
+          <tr>
+            <td><code>unknown_tool</code></td>
+            <td>调用了未注册的工具</td>
+            <td>改用已注册工具，或告知做不到</td>
+            <td>原样重试</td>
+          </tr>
+          <tr>
+            <td><code>tool_failed</code></td>
+            <td>工具内部抛异常</td>
+            <td>告知稍等，必要时换只读工具</td>
+            <td>假装成功</td>
+          </tr>
+          <tr>
+            <td><code>permission_denied</code></td>
+            <td>护栏否决</td>
+            <td>解释规则，提供合规替代</td>
+            <td>绕过护栏</td>
+          </tr>
+          <tr>
+            <td><code>budget_exhausted</code></td>
+            <td>轮数 / 调用数 / 时间耗尽</td>
+            <td>停止并交接</td>
+            <td>继续试</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>工具作者检查清单</h2>
+    <ul>
+      <li><strong>名字像动作</strong>：<code>order_create</code>，不是 <code>order</code>。</li>
+      <li><strong>参数有边界</strong>：必填、类型、枚举值写清楚，缺了就报 <code>missing_argument</code>。</li>
+      <li><strong>错误可行动</strong>：<code>message</code> 说发生了什么，<code>hint</code> 说下一步怎么改。</li>
+      <li><strong>不抛自定义异常给循环</strong>：在工具边界转成结果；trace 由 Harness 记。</li>
+      <li><strong>只读与写入分开</strong>：查询失败可以换只读兜底；下单失败不能假装成功。</li>
+      <li><strong>结果可序列化</strong>：返回 dict / list / 基本类型，不返回对象或异常实例。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>常见 Bug</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>症状</th>
+            <th>根因</th>
+            <th>修复</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>对话突然结束，顾客没收到回复</td>
+            <td>工具异常逃出循环</td>
+            <td>工具边界 try/except，回填 <code>tool_failed</code></td>
+          </tr>
+          <tr>
+            <td>模型重复调用同一个不存在的工具</td>
+            <td>未知工具没有回填结果</td>
+            <td>registry 返回 <code>unknown_tool</code></td>
+          </tr>
+          <tr>
+            <td>模型把 A 单的结果当成 B 单</td>
+            <td><code>tool_use_id</code> 配错</td>
+            <td>结果必须带原请求的 id</td>
+          </tr>
+          <tr>
+            <td>模型在缺参数时编了一个默认值</td>
+            <td>错误信息没有 <code>hint</code></td>
+            <td>明确写“先问顾客，不要猜”</td>
+          </tr>
+          <tr>
+            <td>失败被当成成功，订单状态错乱</td>
+            <td><code>is_error</code> 忘了设 true</td>
+            <td>由 <code>content["ok"]</code> 统一推导</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>术语</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>术语</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>tool_use</code></td>
+            <td>模型发出的调用请求：工具名 + 参数 + 唯一 id。</td>
+          </tr>
+          <tr>
+            <td><code>tool_result</code></td>
+            <td>Harness 执行后的回填：结果内容 + 同一个 id + 是否错误。</td>
+          </tr>
+          <tr>
+            <td><code>is_error</code></td>
+            <td>告诉模型“这次失败”；不能靠模型猜 content 里的 ok。</td>
+          </tr>
+          <tr>
+            <td>工具边界</td>
+            <td>Harness 调用工具函数的那一层；异常在这里转成结果。</td>
+          </tr>
+          <tr>
+            <td>恢复动作</td>
+            <td>模型收到错误后的选择：问顾客、换工具、停止。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>一手来源：</strong><a href="https://www.anthropic.com/engineering/writing-tools-for-agents" rel="noopener">Anthropic · Writing effective tools for agents</a> · <a href="https://docs.anthropic.com/en/docs/build-with-claude/tool-use/overview" rel="noopener">Tool use overview</a></p>
+    <p class="ask">每次改工具，回来对一遍这张表：错误有没有变成结果？结果能不能让模型做下一步？</p>
+  </footer>
+
+</main>
+</body>
+</html>

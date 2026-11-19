@@ -7,7 +7,7 @@
 | 课次 | 主题 | 状态 | 产物 |
 | --- | --- | --- | --- |
 | 01 | 一杯奶茶的 Agent 闭环 | 已 review，比喻已修正 | `lessons/0001-agent-loop.html` |
-| 02 | 工具协议：参数、错误、未知工具 | 待开始 | — |
+| 02 | 工具协议：参数、错误、未知工具 | 已产出，待 review | `lessons/0002-tool-protocol.html` |
 
 ## 2026-11-19 · 第 1 课 review
 
@@ -39,3 +39,30 @@
 - 速查：`reference/harness-map.html`
 - 学习记录：`learning-records/0001-model-is-not-the-barista.md`
 - 提交：见本次 commit
+
+## 2026-11-19 · 第 2 课产出
+
+### 本课要解决的问题
+
+工具调用失败时，异常会逃出循环，顾客收不到任何回复。第 2 课把三条失败路径——缺参数、未知工具、工具异常——统一回填成 `tool_result`。
+
+### 产物
+
+- 课程：`lessons/0002-tool-protocol.html`
+- 速查：`reference/tool-protocol.html`
+- 可运行代码：`boba/tool_protocol.py`
+- 测试：`tests/test_tool_protocol.py`（5 个，全部通过）
+
+### 核心不变量
+
+**1 个 `tool_use` → 1 个 `tool_result`；成功是结果，失败也是结果。**
+
+### 留给学习者的 review 问题
+
+1. `unknown_tool` 为什么不应该自动重试？
+2. 如果 `is_error` 忘了设 true，但 `content.ok` 是 false，会发生什么？
+3. `except Exception` 在这里算不算吞异常？边界在哪？
+
+### 下一课
+
+预算与超时：如果模型收到错误后永远重试，谁喊停？

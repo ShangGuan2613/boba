@@ -531,6 +531,68 @@ tbody tr:hover { background: var(--milk-2); }
   white-space: nowrap;
 }
 
+/* Scenario switcher */
+
+.scenario {
+  margin: 22px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.scenario-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--milk-2);
+}
+
+.scenario-tab {
+  padding: 6px 12px;
+  color: var(--tea);
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.scenario-tab:hover:not(.is-active) {
+  background: var(--card);
+  border-color: var(--caramel);
+}
+
+.scenario-tab.is-active {
+  color: var(--milk);
+  background: var(--caramel-dark);
+  border-color: transparent;
+}
+
+.scenario-panel {
+  display: none;
+  padding: 16px 18px 18px;
+}
+
+.scenario-panel.is-active { display: block; }
+
+.scenario-panel h3 { margin-top: 0; }
+
+.scenario-panel pre { margin: 12px 0; }
+
+.scenario-next {
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--matcha);
+  background: color-mix(in srgb, var(--matcha) 8%, var(--milk));
+  font-family: var(--sans);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
 /* Print */
 
 @media print {
@@ -548,11 +610,13 @@ tbody tr:hover { background: var(--milk-2); }
 
   .lesson, .reference { max-width: none; padding: 0; }
 
-  .loop-controls, button { display: none !important; }
+  .loop-controls, button, .scenario-tabs { display: none !important; }
 
   .loop-card { opacity: 1; }
 
   .quiz .feedback { display: block; }
+
+  .scenario-panel { display: block; break-inside: avoid; }
 
   a { color: #111; text-decoration: underline; }
 

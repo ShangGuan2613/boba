@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 02 · 工具失败，也要回一张小票</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="lesson">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Lesson 02</p>
+    <h1>工具失败，也要回一张小票</h1>
+    <p class="lede">模型可以点错单、点到不存在的菜、遇到机器故障。Harness 不能让一个异常把店关了。</p>
+    <p class="meta">约 14 分钟 · 前置 <a href="0001-agent-loop.html">Lesson 01</a> · <a href="../reference/tool-protocol.html">工具协议速查</a> · <a href="../reference/harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>1. 三张没人接的单</h2>
+    <p>第 1 课的闭环跑通了。现在开始接真顾客，问题立刻出现：</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>场景</th>
+            <th>Harness 里发生什么</th>
+            <th>顾客看到什么</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>“来一杯珍珠奶茶。”</td>
+            <td><code>order_create(item=...)</code> 缺尺寸、冰量、糖度 → <code>TypeError</code> 冒到顶层</td>
+            <td>没有回复，对话结束</td>
+          </tr>
+          <tr>
+            <td>“有会员折扣吗？”</td>
+            <td>模型调用未注册的 <code>get_discount</code> → <code>KeyError</code></td>
+            <td>没有回复，对话结束</td>
+          </tr>
+          <tr>
+            <td>店员想查库存</td>
+            <td><code>inventory_check</code> 抛 <code>RuntimeError</code></td>
+            <td>没有回复，对话结束</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>三次崩溃，同一个原因：<strong>一个 <code>tool_use</code> 发出去了，却没有 <code>tool_result</code> 回来。</strong>循环不是被模型结束的，是被 Harness 抛出的异常炸掉的。</p>
+  </section>
+
+  <section>
+    <h2>2. 一条硬规则</h2>
+    <div class="formula">
+      1 个 <span class="model">tool_use</span>
+      <span class="plus">→</span>
+      1 个 <span class="harness">tool_result</span>
+    </div>
+    <div class="callout callout--key">
+      <p><strong>每一个工具调用，必须恰好收到一个结果。成功是结果，失败也是结果。</strong>这不是提示词里的建议，是循环必须守住的不变量。</p>
+    </div>
+    <p>未知工具、缺参数、工具抛异常、护栏否决、预算耗尽——全都算。Harness 的职责不是替模型把事情做成，而是<strong>把发生的事如实回填</strong>，让模型决定下一步：问顾客、换工具，还是停。</p>
+    <p>要做到这一点，<code>tool_result</code> 至少满足三个条件：</p>
+    <ul>
+      <li><strong>对得上</strong>：<code>tool_use_id</code> 和请求完全一致。</li>
+      <li><strong>标得清</strong>：失败时 <code>is_error: true</code>，不要伪装成成功。</li>
+      <li><strong>能行动</strong>：错误里有 <code>code</code>、<code>message</code> 和下一步 <code>hint</code>。</li>
+    </ul>
+    <p>Anthropic 的工具设计指南也强调：错误信息要具体、可操作，让模型知道怎么改，而不是只丢一句“出错了”。<a href="https://www.anthropic.com/engineering/writing-tools-for-agents" rel="noopener">Writing effective tools for agents</a></p>
+  </section>
+
+  <section>
+    <h2>3. 四种回填，同一个形状</h2>
+    <p>点下面的标签，看同一条 <code>tool_use</code> 在四种情况下各自收到什么。注意：<strong>失败也没有让循环停</strong>。</p>
+
+    <div class="scenario" id="scenario">
+      <div class="scenario-tabs" role="tablist" aria-label="工具回填场景">
+        <button class="scenario-tab is-active" type="button" role="tab" aria-selected="true" data-target="s1">缺参数</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="s2">未知工具</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="s3">工具异常</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="s4">成功对照</button>
+      </div>
+
+      <div class="scenario-panel is-active" id="s1" role="tabpanel">
+        <h3>顾客说“来一杯”，但没说规格</h3>
+<pre><code>调用
+{"tool_use_id": "call_1", "name": "order_create",
+ "args": {"item": "boba_milk_tea"}}
+
+回填
+{"tool_use_id": "call_1", "is_error": true,
+ "content": {"ok": false, "error": {
+   "code": "missing_argument",
+   "message": "order_create 缺少参数：size, ice, sugar",
+   "hint": "先问顾客缺的那一项，不要自己猜。"}}}</code></pre>
+        <p class="scenario-next"><strong>模型下一步：</strong>问“中杯还是大杯？冰量、糖度呢？”拿到回答后，再发一次完整调用。不是猜一个默认值硬做。</p>
+      </div>
+
+      <div class="scenario-panel" id="s2" role="tabpanel">
+        <h3>模型编了一个不存在的工具</h3>
+<pre><code>调用
+{"tool_use_id": "call_2", "name": "get_discount",
+ "args": {"order_id": "B1001"}}
+
+回填
+{"tool_use_id": "call_2", "is_error": true,
+ "content": {"ok": false, "error": {
+   "code": "unknown_tool",
+   "message": "没有注册工具：get_discount",
+   "hint": "只调用已注册的工具；不要重复调用不存在的工具。"}}}</code></pre>
+        <p class="scenario-next"><strong>模型下一步：</strong>不要原样重试。改用已注册的工具，或者直接告诉顾客“目前没有这个功能”。</p>
+      </div>
+
+      <div class="scenario-panel" id="s3" role="tabpanel">
+        <h3>工具自己坏了</h3>
+<pre><code>调用
+{"tool_use_id": "call_3", "name": "inventory_check",
+ "args": {"item": "boba_milk_tea"}}
+
+回填
+{"tool_use_id": "call_3", "is_error": true,
+ "content": {"ok": false, "error": {
+   "code": "tool_failed",
+   "message": "inventory_check 执行失败：RuntimeError: 冰箱传感器离线",
+   "hint": "告诉顾客稍等；需要时换一个只读工具确认状态。"}}}</code></pre>
+        <p class="scenario-next"><strong>模型下一步：</strong>说“稍等，我确认一下”，可以换一个只读工具；不能假装库存正常。</p>
+      </div>
+
+      <div class="scenario-panel" id="s4" role="tabpanel">
+        <h3>参数齐了，正常出杯</h3>
+<pre><code>调用
+{"tool_use_id": "call_4", "name": "order_create",
+ "args": {"item": "boba_milk_tea", "size": "中杯",
+          "ice": "少冰", "sugar": "三分糖"}}
+
+回填
+{"tool_use_id": "call_4", "is_error": false,
+ "content": {"ok": true, "data": {
+   "order_id": "B1001", "item": "珍珠奶茶",
+   "size": "中杯", "ice": "少冰", "sugar": "三分糖",
+   "total": 12}}}</code></pre>
+        <p class="scenario-next"><strong>模型下一步：</strong>回复“中杯少冰三分糖，12 元”，结束这一轮。成功和失败走的是同一条回填路径。</p>
+      </div>
+    </div>
+
+    <p class="code-note">上面是 Harness 内部的对象；发给真实 Messages API 时，<code>content</code> 会被序列化成字符串或内容块，但 <code>tool_use_id</code> 与 <code>is_error</code> 的语义不变。</p>
+  </section>
+
+  <section>
+    <h2>4. 代码：把异常关进边界</h2>
+    <p>关键不是“多写几个 if”，而是让<strong>所有工具执行都经过同一个入口</strong>。未知工具在 registry 里处理：</p>
+
+<pre><code>class ToolRegistry:
+    def run(self, call):
+        tool = self._tools.get(call.name)
+        if tool is None:
+            return self._error(call, "unknown_tool", ...)
+
+        content = tool.run(call.args)
+        return ToolResult(call.id, content, is_error=not content["ok"])</code></pre>
+
+    <p>参数校验和异常捕获在工具边界内处理：</p>
+
+<pre><code>class Tool:
+    def run(self, args):
+        missing = [k for k in self.required if k not in args]
+        if missing:
+            return error_content("missing_argument", ...)
+
+        try:
+            return {"ok": True, "data": self.fn(**args)}
+        except Exception as exc:
+            return error_content("tool_failed", ...)</code></pre>
+
+    <p>这里的 <code>except Exception</code> 不是“吞异常”。它只守在工具边界，把失败<strong>转换成模型能读的结果</strong>；在完整 Harness 里，同一处还会写 trace。它不捕获 <code>BaseException</code>，所以 Ctrl-C 仍然能停。</p>
+
+    <div class="callout">
+      <p><strong>完整可运行代码：</strong><code>boba/tool_protocol.py</code>。五个测试覆盖缺参数、未知工具、工具异常、成功和“每个调用恰好一个结果”。在仓库根目录跑：</p>
+      <pre><code>python3 -m unittest discover -s tests -v</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. 错误码是给模型的下一步</h2>
+    <p>同一个 <code>is_error: true</code>，不同 <code>code</code> 对应不同恢复动作。不要把所有失败都写成“未知错误”。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>code</th>
+            <th>触发</th>
+            <th>模型应当</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>missing_argument</code></td>
+            <td>必填参数没给</td>
+            <td>问顾客缺的那一项</td>
+          </tr>
+          <tr>
+            <td><code>unknown_argument</code></td>
+            <td>给了工具没声明的参数</td>
+            <td>删掉或改正参数后重发</td>
+          </tr>
+          <tr>
+            <td><code>unknown_tool</code></td>
+            <td>调用了未注册的工具</td>
+            <td>改用已注册工具，或告知做不到</td>
+          </tr>
+          <tr>
+            <td><code>tool_failed</code></td>
+            <td>工具内部抛异常</td>
+            <td>告知稍等，必要时换只读工具</td>
+          </tr>
+          <tr>
+            <td><code>permission_denied</code> <span class="tag">后续</span></td>
+            <td>护栏否决</td>
+            <td>解释规则，不要绕过</td>
+          </tr>
+          <tr>
+            <td><code>budget_exhausted</code> <span class="tag">后续</span></td>
+            <td>轮数 / 调用数 / 时间耗尽</td>
+            <td>停止并交接，不要继续试</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. 奶茶店 ↔ 协议</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>店里发生什么</th>
+            <th>协议里是什么</th>
+            <th>正确处理</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>顾客点单没说冰量</td>
+            <td><code>missing_argument</code></td>
+            <td>店员问“冰的还是热的？”</td>
+          </tr>
+          <tr>
+            <td>顾客点了菜单上没有的配方</td>
+            <td><code>unknown_tool</code></td>
+            <td>“菜单上没有这个”，不硬做</td>
+          </tr>
+          <tr>
+            <td>封口机卡住</td>
+            <td><code>tool_failed</code></td>
+            <td>“稍等，我看一下”，不假装成功</td>
+          </tr>
+          <tr>
+            <td>小票和杯子对不上</td>
+            <td><code>tool_use_id</code> 不匹配</td>
+            <td>出杯给错人；必须在回填时配对</td>
+          </tr>
+          <tr>
+            <td>一出错就直接关店</td>
+            <td>异常逃出循环</td>
+            <td>顾客被晾着；必须转成结果</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. 检查理解</h2>
+    <p>先合上上面的内容，凭记忆选。</p>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：循环不能因为一次工具失败就停。" data-explanation="工具异常要在工具边界被转换成 ToolResult，is_error=true，再由模型决定下一步。">
+      <p class="question">1. 工具函数抛异常，Harness 应该？</p>
+      <div class="options">
+        <button class="option" type="button">直接让进程崩溃</button>
+        <button class="option" type="button">回填错误给模型</button>
+        <button class="option" type="button">重试到成功为止</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="2" data-hint="再想一步：配对靠的是调用 id，不是订单号。" data-explanation="tool_use_id 必须和请求完全一致；否则结果对不上单，模型会把 A 的结果当成 B 的。">
+      <p class="question">2. 哪个字段让 tool_result 和请求配对？</p>
+      <div class="options">
+        <button class="option" type="button">顾客订单编号</button>
+        <button class="option" type="button">门店会话编号</button>
+        <button class="option" type="button">工具调用编号</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：缺参数时最该补的是信息。" data-explanation="missing_argument 的正确恢复是问顾客，不是猜默认值；猜出来的订单可能不是顾客想要的。">
+      <p class="question">3. 模型收到 missing_argument 后最该做什么？</p>
+      <div class="options">
+        <button class="option" type="button">猜一个默认值</button>
+        <button class="option" type="button">问顾客缺什么</button>
+        <button class="option" type="button">换个工具重试</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>8. 这一课故意没做的事</h2>
+    <ul>
+      <li>没有做完整的 JSON Schema 类型 / 枚举校验，只查了必填和未知参数。</li>
+      <li>没有重试和退避——<code>tool_failed</code> 先交回模型，不自动重试。</li>
+      <li>没有错误分类统计，也没有 trace 落盘。</li>
+      <li>没有权限护栏——<code>permission_denied</code> 只占了个位置。</li>
+    </ul>
+    <p>下一课：<strong>预算与超时</strong>。如果模型收到错误后永远重试，谁喊停？</p>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://www.anthropic.com/engineering/writing-tools-for-agents" rel="noopener">Anthropic · Writing effective tools for agents</a>。重点读“Return meaningful context”和错误处理部分。</p>
+    <p><strong>延伸：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a> 的 Factor 4–6：tools are just structured outputs、unify execution state、launch/pause/resume。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：如果你觉得 <code>unknown_tool</code> 应该自动重试，或者 <code>except Exception</code> 仍然是吞异常，直接说——下一课就从分歧开始。</p>
+  </footer>
+
+</main>
+<script src="../assets/components.js"></script>
+</body>
+</html>

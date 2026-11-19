@@ -69,13 +69,41 @@
     });
   }
 
+  function initScenarios() {
+    var scenarios = document.querySelectorAll(".scenario");
+
+    scenarios.forEach(function (scenario) {
+      var tabs = Array.prototype.slice.call(scenario.querySelectorAll(".scenario-tab"));
+      var panels = Array.prototype.slice.call(scenario.querySelectorAll(".scenario-panel"));
+      if (!tabs.length || !panels.length) return;
+
+      tabs.forEach(function (tab) {
+        tab.addEventListener("click", function () {
+          var target = tab.getAttribute("data-target");
+
+          tabs.forEach(function (item) {
+            var active = item === tab;
+            item.classList.toggle("is-active", active);
+            item.setAttribute("aria-selected", active ? "true" : "false");
+          });
+
+          panels.forEach(function (panel) {
+            panel.classList.toggle("is-active", panel.id === target);
+          });
+        });
+      });
+    });
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       initLoop();
       initQuizzes();
+      initScenarios();
     });
   } else {
     initLoop();
     initQuizzes();
+    initScenarios();
   }
 })();
