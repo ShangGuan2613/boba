@@ -109,12 +109,13 @@
 
   <section>
     <h2>收尾时的 invariant</h2>
-    <p>如果铃响时手里还有没执行的 <code>tool_use</code>，也要回一张 <code>tool_result</code>，<code>is_error: true</code>，<code>code: budget_exhausted</code>。第 2 课的“每个调用都有结果”不能破。</p>
+    <p>如果铃响时手里还有没执行的 <code>tool_use</code>，也要回一张 <code>tool_result</code>，<code>is_error: true</code>，<code>code: budget_exhausted</code>。第 2 课的“每个调用都有结果”不能破。代码里用 <code>budget_error_result(call, status)</code> 生成这张小票。</p>
 <pre><code>{"tool_use_id": "call_17", "is_error": true,
  "content": {"ok": false, "error": {
    "code": "budget_exhausted",
    "message": "max_tool_calls 已用完",
    "hint": "停止并交接，不要继续试。"}}}</code></pre>
+    <p><strong>为什么不能直接 break：</strong>直接停会留下悬空的 <code>tool_use</code>；下一次模型调用或恢复会话会看到一个没有结果的请求，真实 API 可能报协议错误，模型只能重复或猜。break 只停住循环，没有关掉单子。</p>
   </section>
 
   <section>

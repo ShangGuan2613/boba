@@ -158,10 +158,28 @@ except BudgetExceeded as stop:
         messages.append(budget_error(pending_call.id, stop.status))
     return RunResult(status=stop.status, message=stop.user_message)</code></pre>
 
-    <p>最后那段 <code>pending_call</code> 是第 2 课 invariant 的延续：<strong>铃响时手里还攥着一张没做的单子，也要回一张 <code>budget_exhausted</code> 小票。</strong>不能因为要打烊，就把 <code>tool_use</code> 晾在那里。</p>
+    <h3>为什么不能直接 break？</h3>
+    <p>打烊时，如果后厨窗口手里还攥着一张单子，不能直接关灯走人。你要在单子上盖一个“未完成”的章，放回前台；否则下一班的人看到一张没有结局的单子，不知道是该做、该退，还是该问顾客。</p>
+    <p>代码里也一样。假设模型刚发出 <code>tool_use call_17</code>，预算就响了。如果你直接 <code>break</code>：</p>
+
+<pre><code>messages = [
+    user("库存还有吗？"),
+    assistant(tool_use call_17),   # 单子递进来了
+    # break：没有 tool_result
+]</code></pre>
+
+    <p>这条对话就留下了一个“悬空的 <code>tool_use</code>”。下一次模型调用（或恢复会话）会看到一个没有结果的工具请求：真实 Messages API 可能直接报协议错误；就算不报错，模型也只能重复调用或凭空猜。顾客那边则是一片空白。</p>
+    <p>正确做法是先补小票，再收工：</p>
+
+<pre><code>messages.append(budget_error_result(call_17, stop.status))
+return RunResult(status=stop.status, message=stop.user_message)</code></pre>
+
+    <div class="callout callout--key">
+      <p><strong>打烊不是把单子撕了，是给单子盖章。</strong><code>break</code> 只停住了 Harness，没有关掉那张单子；补上 <code>tool_result</code>，才是把单子交回前台。</p>
+    </div>
 
     <div class="callout">
-      <p><strong>完整可运行代码：</strong><code>boba/budget.py</code>。五个测试覆盖轮数上限、工具上限、超时、优先级和用量快照。在仓库根目录跑：</p>
+      <p><strong>完整可运行代码：</strong><code>boba/budget.py</code>。八个测试覆盖轮数上限、工具上限、超时、优先级、用量快照，以及铃响时给待执行调用补结果。在仓库根目录跑：</p>
       <pre><code>python3 -m unittest discover -s tests -v</code></pre>
     </div>
   </section>
@@ -255,6 +273,15 @@ run.end          status=max_tool_calls</code></pre>
         <button class="option" type="button">空白，没有回复</button>
         <button class="option" type="button">假装已经做好了</button>
         <button class="option" type="button">给一张说明小票</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+    <div class="quiz" data-answer="0" data-hint="再想一步：循环停了，单子还在。" data-explanation="直接 break 会留下悬空的 tool_use；真实 API 可能报协议错误，模型只能重复或猜，顾客什么也看不到。正确做法是先补 budget_exhausted 的 tool_result，再收工。">
+      <p class="question">4. 铃响时还有一张单子没做，直接 break 会？</p>
+      <div class="options">
+        <button class="option" type="button">留下一张悬空单</button>
+        <button class="option" type="button">补一张退单小票</button>
+        <button class="option" type="button">让顾客继续等待</button>
       </div>
       <p class="feedback" aria-live="polite"></p>
     </div>

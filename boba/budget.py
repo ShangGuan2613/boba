@@ -14,6 +14,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
+from boba.tool_protocol import ToolCall, ToolResult, error_content
+
 
 class BudgetExceeded(Exception):
     """预算耗尽。它由 Harness 捕获，变成一次带状态的收尾，不逃到用户面前。"""
@@ -78,6 +80,19 @@ class Budget:
             "tool_calls": self.tool_calls,
             "elapsed": round(self.elapsed, 2),
         }
+
+
+def budget_error_result(call: ToolCall, status: str) -> ToolResult:
+    """铃响时，给还没执行的 tool_use 补一张退单小票。"""
+    return ToolResult(
+        call.id,
+        error_content(
+            "budget_exhausted",
+            f"{status} 已用完",
+            "停止并交接，不要继续试。",
+        ),
+        is_error=True,
+    )
 
 
 def demo() -> None:

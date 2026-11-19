@@ -1,6 +1,7 @@
 import unittest
 
-from boba.budget import Budget, BudgetExceeded
+from boba.budget import Budget, BudgetExceeded, budget_error_result
+from boba.tool_protocol import ToolCall
 
 
 class BudgetTest(unittest.TestCase):
@@ -85,6 +86,16 @@ class BudgetTest(unittest.TestCase):
             budget.snapshot(),
             {"turns": 1, "tool_calls": 1, "elapsed": 0.0},
         )
+
+    def test_budget_error_result_closes_pending_call(self) -> None:
+        call = ToolCall("call_17", "inventory_check", {"item": "boba_milk_tea"})
+
+        result = budget_error_result(call, "max_tool_calls")
+
+        self.assertEqual(result.tool_use_id, "call_17")
+        self.assertTrue(result.is_error)
+        self.assertEqual(result.content["error"]["code"], "budget_exhausted")
+        self.assertIn("max_tool_calls", result.content["error"]["message"])
 
 
 if __name__ == "__main__":
