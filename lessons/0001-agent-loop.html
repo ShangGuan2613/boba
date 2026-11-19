@@ -32,8 +32,8 @@
 
   <section>
     <h2>2. 模型之外，还缺一层东西</h2>
-    <p>把模型想象成店员：会说话、会判断顾客意图，但不知道今天冰箱里还剩多少珍珠。要让店员真正出杯，你还需要菜单、设备、店规和店长。</p>
-    <p>这些“模型之外的一切”，就是 <strong>Harness</strong>。一个常见的说法是：</p>
+    <p>把模型想象成店员脑子里负责判断和说话的那部分：它会理解顾客、决定下一步，但不知道今天冰箱里还剩多少珍珠，也没有手脚去真的出杯。<strong>店员整个人</strong>，其实是“判断”加上“执行”——也就是 Model + Harness。</p>
+    <p>要让这杯奶茶真的做出来，你还需要菜单、设备、店规和店长；这些“模型之外的一切”，就是 <strong>Harness</strong>。一个常见的说法是：</p>
     <div class="formula">
       <span class="model">Agent</span>
       <span class="plus">=</span>
@@ -122,6 +122,7 @@ seq 2  tool.result  {"items": [{"name": "珍珠奶茶", "price": 12}, ...]}
 seq 3  model.turn   text      "今天有珍珠奶茶 12 元、芝士莓莓 18 元……"</code></pre>
 
     <p class="code-note">这段代码还缺很多东西：未知工具怎么办、工具报错怎么办、最多几轮、超时、trace 落盘。它们是后面每一课的主题。</p>
+    <p>如果漏掉 <code>seq 2</code> 的回填，下一轮模型就没有新信息：它可能重复同一个 <code>tool_use</code>，也可能开始编。真实 Messages API 还可能因为缺少配对的 <code>tool_result</code> 直接报协议错误。</p>
 
     <div class="callout callout--warn">
       <p><strong>先别急着加抽象。</strong>Anthropic 在<a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">《Building Effective Agents》</a>里的经验是：成功的实现通常从简单、可组合的模式开始，而不是一上来就套复杂框架。先把这五步跑通，再谈框架。</p>
@@ -130,7 +131,7 @@ seq 3  model.turn   text      "今天有珍珠奶茶 12 元、芝士莓莓 18 �
 
   <section>
     <h2>5. 奶茶店 ↔ Harness</h2>
-    <p>同一个东西，用店里的角色再对一遍。以后卡住时，先问：这是店员的事，还是店长的事？</p>
+    <p>同一个东西，用店里的角色再对一遍。以后卡住时，先问：是店员的判断错了，还是店员的手脚和店规没跟上？</p>
 
     <div class="table-wrap">
       <table>
@@ -143,9 +144,19 @@ seq 3  model.turn   text      "今天有珍珠奶茶 12 元、芝士莓莓 18 �
         </thead>
         <tbody>
           <tr>
-            <td>店员</td>
+            <td>店员（整个人）</td>
+            <td>Agent = Model + Harness</td>
+            <td>不会对话，也不会出杯</td>
+          </tr>
+          <tr>
+            <td>店员的判断 / 话术</td>
             <td>Model</td>
-            <td>不会对话，也不会决定下一步</td>
+            <td>不会理解顾客，也不会决定下一步</td>
+          </tr>
+          <tr>
+            <td>店员的手脚 + 设备</td>
+            <td>Harness 执行层</td>
+            <td>只会说，不会真的查库存、扣原料</td>
           </tr>
           <tr>
             <td>菜单 / 配方卡</td>
@@ -175,6 +186,10 @@ seq 3  model.turn   text      "今天有珍珠奶茶 12 元、芝士莓莓 18 �
         </tbody>
       </table>
     </div>
+
+    <div class="callout callout--key">
+      <p><strong>学习者的修正（2026-11-19）：</strong>第一版把“店员”直接等同于 Model。学习者指出：模型只负责思考，不执行；店员本身才是店铺的执行方。修正后：<strong>店员是 Model + Harness 的整体</strong>，Model 只是店员的判断与话术，Harness 才是手脚、设备与店规。</p>
+    </div>
   </section>
 
   <section>
@@ -191,7 +206,7 @@ seq 3  model.turn   text      "今天有珍珠奶茶 12 元、芝士莓莓 18 �
       <p class="feedback" aria-live="polite"></p>
     </div>
 
-    <div class="quiz" data-answer="2" data-hint="再想一步：结果不回填，下一轮模型就看不见。" data-explanation="tool_result 必须回到 messages，下一轮模型才能看见；否则它会重复调用或凭空编。">
+    <div class="quiz" data-answer="2" data-hint="再想一步：结果不回填，下一轮模型就看不见。" data-explanation="tool_result 必须回到 messages，下一轮模型才能看见；否则它没有新信息，会重复调用或凭空编；真实 API 还可能因缺少配对直接报协议错误。">
       <p class="question">2. 工具结果为什么必须放回 messages？</p>
       <div class="options">
         <button class="option" type="button">让终端日志更好看</button>

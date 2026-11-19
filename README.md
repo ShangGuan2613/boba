@@ -24,14 +24,17 @@
 
 | 课 | 主题 | 状态 |
 | --- | --- | --- |
-| 01 | 一杯奶茶的 Agent 闭环 | 待 review |
-| 02 | 工具协议：模型怎么“点单” | 未开始 |
+| 01 | 一杯奶茶的 Agent 闭环 | 已 review，比喻已修正 |
+| 02 | 工具协议：参数、错误、未知工具 | 未开始 |
+
+学习进程详见 `PROGRESS.md`。
 
 ## 沉淀
 
 - Notion：https://app.notion.com/p/41d3b41c3823814b99eae1e4cd40425b?pvs=204
 - 规则：`CLAUDE.md`
-- STD-1000 临时模板：`docs/STD-1000-PENDING.md`
+- STD-1000 v0.1 工作草案：`docs/STD-1000.md`
+- GitHub 学习日志：`PROGRESS.md`
 
 ## 旧实现
 

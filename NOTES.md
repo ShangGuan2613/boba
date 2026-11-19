@@ -14,7 +14,7 @@
 所有在本仓库工作的 Claude Code agent，必须把经验与进程沉淀到 Notion：
 
 - 页面：https://app.notion.com/p/41d3b41c3823814b99eae1e4cd40425b?pvs=204
-- 经验格式：STD-1000（定义待学习者确认，临时模板见 `docs/STD-1000-PENDING.md`）
+- 经验格式：STD-1000（v0.1 工作草案见 `docs/STD-1000.md`，待学习者批准）
 - 进程格式：STAR（Situation / Task / Action / Result）
 - 每课结束前更新进度表、证据链接和 STAR 记录。
 - 无法写入 Notion 时，必须明确说明失败，不能假装已写。
@@ -25,8 +25,18 @@
 - 工作区已清空，改为 `/teach` 结构：`lessons/`、`reference/`、`assets/`。
 - 第一课：最小 Agent 闭环（模型 → 工具 → 模型）。
 
+## 2026-11-19 · 第 1 课 review
+
+- 学习者答对：执行发生在 Harness。
+- 学习者补充：结果不回填，下一轮模型会重新来一轮；真实 API 还可能因缺少配对的 `tool_result` 报协议错误。
+- 学习者修正比喻：模型只思考、不执行；店员本身才是执行方。已改为“店员（整个人）= Model + Harness”。
+- 下一步：工具协议（参数缺失、未知工具、工具报错回填）。
+
 ## 待确认
 
-- STD-1000 的字段 / 模板 / 链接。
-- `MISSION.md` 是否符合真实目标。
-- 学习者的 Python / LLM / Agent 基础，用于调难度。
+- [ ] 批准 STD-1000 v0.1（`docs/STD-1000.md`）
+- [ ] 学习者的 Python / LLM / Agent 基础，用于调难度
+
+## 已确认
+
+- [x] `MISSION.md` 的目标（2026-11-19）
