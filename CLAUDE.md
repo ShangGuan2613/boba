@@ -1,5 +1,8 @@
 # Boba 教学项目 · Agent 规则
 
+> 下一个 session 开始前，先读 Notion 主页顶部的「给下一个 session 的交接」：
+> https://app.notion.com/p/41d3b41c3823814b99eae1e4cd40425b?pvs=204
+
 ## 这是什么
 
 这是一个 `/teach` 教学工作区，不是产品仓库。目标是用“开奶茶店”这个核心场景，从零理解并实现 Agent 与 Harness。
