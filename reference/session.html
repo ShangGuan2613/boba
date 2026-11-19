@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference · 状态与 session 速查</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="reference">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Reference</p>
+    <h1>状态与 session 速查</h1>
+    <p class="lede">一页纸：订单夹里放什么、什么时候写、护栏读哪里、跨桌怎么隔离。</p>
+    <p class="meta"><a href="../lessons/0005-session.html">← Lesson 05</a> · <a href="../lessons/0004-guardrails.html">Lesson 04</a> · <a href="harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>一句话</h2>
+    <div class="formula">
+      <span class="harness">护栏读状态</span>
+      <span class="plus">→</span>
+      <span class="model">工具改状态</span>
+      <span class="plus">→</span>
+      <span class="model">模型只看结果</span>
+    </div>
+    <p><strong>messages 是模型眼前的单子，session state 是柜台后面的订单夹。</strong>单笔护栏只看这一张单；session 级护栏看“已有 + 本次”。</p>
+  </section>
+
+  <section>
+    <h2>订单夹 vs 上下文</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>messages</th>
+            <th>session state</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>谁持有</td>
+            <td>本轮发给模型的消息</td>
+            <td>Harness / 业务系统</td>
+          </tr>
+          <tr>
+            <td>内容</td>
+            <td>用户、模型、工具结果的对话</td>
+            <td>桌号、订单、数量、状态</td>
+          </tr>
+          <tr>
+            <td>生命周期</td>
+            <td>可被截断、摘要</td>
+            <td>跨轮次保留，直到显式删除</td>
+          </tr>
+          <tr>
+            <td>模型能否改</td>
+            <td>能说“我记得”</td>
+            <td>不能直接改，只能经工具提交</td>
+          </tr>
+          <tr>
+            <td>冲突时</td>
+            <td>参考</td>
+            <td><strong>权威</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>最小状态结构</h2>
+    <div class="split">
+      <div>
+        <h3>SessionState</h3>
+<pre><code>{
+  "id": "table-3",
+  "orders": [
+    {"order_id": "B1001",
+     "quantity": 10,
+     "status": "draft"}
+  ]
+}</code></pre>
+      </div>
+      <div>
+        <h3>派生字段</h3>
+<pre><code>total_cups = sum(
+  order["quantity"]
+  for order in orders
+)
+
+# 不单独存 total，
+# 避免两个数对不上。</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>三阶段提交</h2>
+    <div class="flow">
+      <div class="flow-step"><strong>1. 检查</strong><span>护栏读订单夹</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>2. 执行</strong><span>只有放行才做</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>3. 记账</strong><span>成功后才写</span></div>
+    </div>
+<pre><code>def place_order(session, call, tools, guardrails):
+    result = run_guarded(
+        call, tools, guardrails, session
+    )
+
+    if not result.is_error:
+        data = result.content["data"]
+        session.add_order(
+            data["order_id"],
+            data["quantity"],
+        )
+
+    return result</code></pre>
+    <p>拒绝或失败不写状态。否则会出现“幽灵订单”：后厨没做，额度却已经被占用。</p>
+  </section>
+
+  <section>
+    <h2>session 级护栏</h2>
+<pre><code>class MaxCupsPerSession:
+    name = "max_cups_per_session"
+
+    def __init__(self, limit=10):
+        self.limit = limit
+
+    def check(self, call, session=None):
+        if call.name != "order_create":
+            return ALLOW
+
+        if session is None:
+            return GuardrailDecision(
+                False, "guardrail_error",
+                "缺少 session，无法检查总量。",
+                "默认拒绝；检查接线。",
+            )
+
+        quantity = call.args.get("quantity", 1)
+        if session.total_cups + quantity &gt; self.limit:
+            return GuardrailDecision(
+                False, "permission_denied",
+                f"已有 {session.total_cups} 杯，"
+                f"再加 {quantity} 杯会超。",
+                "不要拆单；转人工。",
+            )
+        return ALLOW</code></pre>
+    <p>检查的是 <code>session.total_cups + quantity</code>，不是单独的 <code>quantity</code>。缺少 session 时默认拒绝。</p>
+  </section>
+
+  <section>
+    <h2>隔离规则</h2>
+    <ul>
+      <li><strong>按桌号取夹子</strong>：<code>store.get(session_id)</code>，不同桌号不同对象。</li>
+      <li><strong>只查自己的夹子</strong>：<code>order_status</code> 只读当前 session 的订单列表。</li>
+      <li><strong>跨桌查单一律查无此单</strong>：不返回详情，也不确认订单号是否存在。</li>
+      <li><strong>session 缺失默认拒绝</strong>：没有桌号，就不知道总量，不能放行。</li>
+      <li><strong>不要用全局订单表代替 session</strong>：全局表适合员工查单，不适合顾客自助查询。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>常见 Bug</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>症状</th>
+            <th>根因</th>
+            <th>修复</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>拆单仍能绕过</td>
+            <td>只检查单笔</td>
+            <td>读 <code>session.total_cups</code></td>
+          </tr>
+          <tr>
+            <td>正常单被拒</td>
+            <td>拒绝/失败也写了状态</td>
+            <td>只在成功后记账</td>
+          </tr>
+          <tr>
+            <td>第二轮忘了点过什么</td>
+            <td>状态只活在消息里</td>
+            <td>状态放 Harness，工具读回来</td>
+          </tr>
+          <tr>
+            <td>5 号桌看到 3 号桌订单</td>
+            <td>查询走了全局表</td>
+            <td>只查当前 session</td>
+          </tr>
+          <tr>
+            <td>护栏拿不到总量</td>
+            <td>没把 session 传进 check</td>
+            <td>接线时显式传 session；缺失默认拒绝</td>
+          </tr>
+          <tr>
+            <td>重启后订单全没了</td>
+            <td>状态只在内存</td>
+            <td>落库 / 持久化</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>术语</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>术语</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>session</td>
+            <td>一段有边界的人机交互；这里用桌号表示。</td>
+          </tr>
+          <tr>
+            <td>session state</td>
+            <td>跨轮次保留的业务状态，比如订单夹。</td>
+          </tr>
+          <tr>
+            <td>messages</td>
+            <td>本轮对话上下文，不等于业务状态。</td>
+          </tr>
+          <tr>
+            <td>幽灵订单</td>
+            <td>被拒绝或失败，却写进了状态的订单。</td>
+          </tr>
+          <tr>
+            <td>session 隔离</td>
+            <td>每个 session 只能读写自己的状态。</td>
+          </tr>
+          <tr>
+            <td>三阶段提交</td>
+            <td>检查 → 执行 → 成功后记账。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents · Factor 5</a></p>
+    <p class="ask">每次加状态，回来对一遍：谁持有？什么时候写？护栏读哪里？跨 session 会不会串？</p>
+  </footer>
+
+</main>
+</body>
+</html>

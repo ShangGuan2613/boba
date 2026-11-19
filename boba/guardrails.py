@@ -8,7 +8,7 @@ permission_denied 小票，模型只能解释，不能绕过。
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from boba.tool_protocol import ToolCall, ToolRegistry, ToolResult, error_content
 
@@ -27,7 +27,7 @@ ALLOW = GuardrailDecision(True)
 class Guardrail(Protocol):
     name: str
 
-    def check(self, call: ToolCall) -> GuardrailDecision:
+    def check(self, call: ToolCall, session: Any = None) -> GuardrailDecision:
         ...
 
 
@@ -39,7 +39,7 @@ class MaxCupsPerOrder:
     def __init__(self, limit: int = 10) -> None:
         self.limit = limit
 
-    def check(self, call: ToolCall) -> GuardrailDecision:
+    def check(self, call: ToolCall, session: Any = None) -> GuardrailDecision:
         if call.name != "order_create":
             return ALLOW
 
@@ -69,10 +69,10 @@ class GuardrailRegistry:
     def __init__(self, guardrails: list[Guardrail] | None = None) -> None:
         self._guardrails = list(guardrails or [])
 
-    def check(self, call: ToolCall) -> GuardrailDecision:
+    def check(self, call: ToolCall, session: Any = None) -> GuardrailDecision:
         for guardrail in self._guardrails:
             try:
-                decision = guardrail.check(call)
+                decision = guardrail.check(call, session)
             except Exception as exc:  # 失败关闭：护栏坏了，不能放行
                 return GuardrailDecision(
                     False,
@@ -94,10 +94,13 @@ def denied_result(call: ToolCall, decision: GuardrailDecision) -> ToolResult:
 
 
 def run_guarded(
-    call: ToolCall, tools: ToolRegistry, guardrails: GuardrailRegistry
+    call: ToolCall,
+    tools: ToolRegistry,
+    guardrails: GuardrailRegistry,
+    session: Any = None,
 ) -> ToolResult:
     """先过店规，再让工具动手。被拒绝时工具一次都不会执行。"""
-    decision = guardrails.check(call)
+    decision = guardrails.check(call, session)
     if not decision.allowed:
         return denied_result(call, decision)
     return tools.run(call)

@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 05 · 小票与订单夹：状态 / session</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="lesson">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Lesson 05</p>
+    <h1>小票与订单夹：同一桌的单，不能各算各的</h1>
+    <p class="lede">单笔护栏只看手里这张单；订单夹记得这一桌从坐下到现在一共点了多少。</p>
+    <p class="meta">约 15 分钟 · 前置 <a href="0004-guardrails.html">Lesson 04</a> · <a href="../reference/session.html">状态速查</a> · <a href="../reference/harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>1. 上一课留下的洞：两单各 10 杯</h2>
+    <p>顾客要 20 杯。前台没有一次下 20 杯，而是拆成两张单：</p>
+
+<pre><code>call_1  order_create(quantity=10)  →  ok，B1001
+call_2  order_create(quantity=10)  →  ok，B1002
+
+两条单笔护栏各自都通过。合计：20 杯。</code></pre>
+
+    <p>后厨做了 20 杯，珍珠用完了。护栏没有坏，它只是<strong>只看自己收到的这一张单</strong>：第一张 10 杯，没超；第二张也是 10 杯，也没超。</p>
+    <p>店里的老员工不会这么看。她会翻开这一桌的<strong>订单夹</strong>：已经有 10 杯了，再加 10 杯就是 20 杯，不能接。</p>
+
+    <div class="callout callout--key">
+      <p><strong>单笔护栏看“这一张单”；session 级护栏看“这一桌到目前为止”。</strong>要补这个洞，先得让店里有一本跨轮次、跨单子的订单夹。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>2. 订单夹是什么：桌号 + 已下的单</h2>
+    <p>订单夹不是模型脑子里的记忆。模型这一轮能看见的是 <code>messages</code>；订单夹是柜台后面真实存在的一本夹子，由 Harness 持有。</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>messages（上下文）</th>
+            <th>session state（订单夹）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>谁持有</td>
+            <td>这一轮发给模型的消息</td>
+            <td>Harness / 店铺系统</td>
+          </tr>
+          <tr>
+            <td>里面有什么</td>
+            <td>用户说了什么、模型说过什么、工具返回了什么</td>
+            <td>桌号、已下的单、每单数量、状态</td>
+          </tr>
+          <tr>
+            <td>会忘吗</td>
+            <td>会被截断、摘要、遗漏</td>
+            <td>只要没删，就一直在</td>
+          </tr>
+          <tr>
+            <td>模型能改吗</td>
+            <td>能“说”自己记得什么</td>
+            <td>不能直接改；只能通过工具成功后的提交</td>
+          </tr>
+          <tr>
+            <td>出了分歧信谁</td>
+            <td>参考</td>
+            <td><strong>以订单夹为准</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>这本夹子最少要有三样东西：</p>
+    <ul>
+      <li><strong>桌号</strong>（<code>session_id</code>）：这是哪一桌的夹子。</li>
+      <li><strong>订单列表</strong>：这一桌已经成功下了哪些单。</li>
+      <li><strong>合计</strong>：从订单列表算出来的总杯数，护栏直接读它。</li>
+    </ul>
+
+    <div class="callout">
+      <p><strong>关键：模型看不见订单夹，除非工具把结果返回给它。</strong>所以“刚才点了 5 杯”只是模型的一句话；订单夹里写着 10 杯，就以 10 杯为准。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. 四种时刻，订单夹怎么反应</h2>
+    <p>点标签，看同一本订单夹在四个场景里的状态。注意第二单和第三单：一个修好了拆单，一个暴露了串桌的风险。</p>
+
+    <div class="scenario" id="session-scenario">
+      <div class="scenario-tabs" role="tablist" aria-label="session 场景">
+        <button class="scenario-tab is-active" type="button" role="tab" aria-selected="true" data-target="s1">先点 5 杯</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="s2">10 杯 + 10 杯</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="s3">换桌查单</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="s4">模型说记错了</button>
+      </div>
+
+      <div class="scenario-panel is-active" id="s1" role="tabpanel">
+        <h3>3 号桌先点 5 杯：正常记账</h3>
+<pre><code>session = table-3
+订单夹: []
+
+call_1  order_create(quantity=5)
+  护栏: 0 + 5 = 5 ≤ 10  →  放行
+  后厨: 做 5 杯
+  记账: 订单夹 → [B1001 × 5]
+
+订单夹合计: 5 杯</code></pre>
+        <p class="scenario-next"><strong>要点：</strong>先检查，再执行，成功后记账。三步顺序不能换。</p>
+      </div>
+
+      <div class="scenario-panel" id="s2" role="tabpanel">
+        <h3>3 号桌要 20 杯，拆成两单：第二单被挡</h3>
+<pre><code>session = table-3
+订单夹: []
+
+call_1  order_create(quantity=10)
+  护栏: 0 + 10 = 10 ≤ 10  →  放行
+  记账: 订单夹 → [B1001 × 10]
+
+call_2  order_create(quantity=10)
+  护栏: 10 + 10 = 20 &gt; 10  →  permission_denied
+  后厨: 一次都没动手
+  记账: 不写；订单夹仍是 [B1001 × 10]
+
+订单夹合计: 10 杯</code></pre>
+        <p class="scenario-next"><strong>要点：</strong>第二单被拒，不是因为单笔超限，而是因为“订单夹已有 + 本次”超了。拆单不再能绕过。</p>
+      </div>
+
+      <div class="scenario-panel" id="s3" role="tabpanel">
+        <h3>5 号桌来查 3 号桌的订单号：查无此单</h3>
+<pre><code>session = table-5
+订单夹: []
+
+call_3  order_status(order_id="B1001")
+  工具只查 table-5 的订单夹
+  B1001 不在这里
+  →  not_found
+
+不能返回“B1001 是 10 杯珍珠奶茶，属于 3 号桌”。
+那等于把邻桌的订单详情泄露了。</code></pre>
+        <p class="scenario-next"><strong>要点：</strong>每个 session 只能看自己的订单。跨桌查询不只要拒绝内容，连“这个订单号存不存在”都不该确认。</p>
+      </div>
+
+      <div class="scenario-panel" id="s4" role="tabpanel">
+        <h3>模型在第二轮说“刚才只点了 5 杯”：信订单夹</h3>
+<pre><code>messages 里模型说:
+  “您刚才点了 5 杯，还可以再加 5 杯。”
+
+订单夹里:
+  [B1001 × 10]
+
+call_4  order_create(quantity=5)
+  护栏读订单夹: 10 + 5 = 15 &gt; 10
+  →  permission_denied
+
+模型的说法可以错、可以过期；
+订单夹是权威状态。</code></pre>
+        <p class="scenario-next"><strong>要点：</strong>不要让模型“自己记住总量”。它负责说话，订单夹负责记账；护栏只信订单夹。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. 代码：一本订单夹，一条总量护栏</h2>
+    <p>订单夹只需要记住“这一桌”的单。合计不单独存，直接从订单列表算，避免两个数对不上：</p>
+
+<pre><code>@dataclass
+class SessionState:
+    id: str
+    orders: list[dict] = field(default_factory=list)
+
+    @property
+    def total_cups(self):
+        return sum(order["quantity"] for order in self.orders)
+
+    def add_order(self, order_id, quantity):
+        self.orders.append({
+            "order_id": order_id,
+            "quantity": quantity,
+            "status": "draft",
+        })</code></pre>
+
+    <p>桌号到订单夹的映射由 <code>SessionStore</code> 管。没见过的桌号先开一本空夹子；同一个桌号每次拿到的是同一本。</p>
+
+<pre><code>class SessionStore:
+    def __init__(self):
+        self._sessions = {}
+
+    def get(self, session_id):
+        if session_id not in self._sessions:
+            self._sessions[session_id] = SessionState(session_id)
+        return self._sessions[session_id]</code></pre>
+
+    <p>护栏不再只读 <code>call.args</code>，还要读 <code>session.total_cups</code>：</p>
+
+<pre><code>class MaxCupsPerSession:
+    name = "max_cups_per_session"
+
+    def __init__(self, limit=10):
+        self.limit = limit
+
+    def check(self, call, session=None):
+        if call.name != "order_create":
+            return ALLOW
+
+        if session is None:
+            return GuardrailDecision(
+                False, "guardrail_error",
+                "缺少 session，无法检查会话总量。",
+                "默认拒绝；检查护栏接线。",
+            )
+
+        quantity = call.args.get("quantity", 1)
+        if session.total_cups + quantity &gt; self.limit:
+            return GuardrailDecision(
+                False, "permission_denied",
+                f"本次会话最多 {self.limit} 杯，"
+                f"已有 {session.total_cups} 杯，再加 {quantity} 杯会超。",
+                "不要拆单；向顾客解释店规，必要时转人工。",
+            )
+        return ALLOW</code></pre>
+
+    <p>接线还是同一个入口，只是多传一个 <code>session</code>。真正把“检查”和“记账”分开的是 <code>place_order</code>：</p>
+
+<pre><code>def place_order(session, call, tools, guardrails):
+    result = run_guarded(call, tools, guardrails, session)
+
+    if not result.is_error:
+        data = result.content["data"]
+        session.add_order(data["order_id"], data["quantity"])
+
+    return result</code></pre>
+
+    <div class="flow">
+      <div class="flow-step"><strong>看订单夹</strong><span>护栏读总量</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>后厨做单</strong><span>只有放行才执行</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>记订单夹</strong><span>成功后才写</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>回小票</strong><span>模型只看结果</span></div>
+    </div>
+
+    <div class="callout callout--warn">
+      <p><strong>为什么“记账”必须在成功之后？</strong>被拒绝的单如果也写进订单夹，就会产生“幽灵订单”：后厨根本没做，但合计已经占用了额度，下一张正常单反而被拒。状态要记录事实，不记录意图。</p>
+    </div>
+
+    <div class="callout">
+      <p><strong>完整可运行代码：</strong><code>boba/session.py</code>。测试覆盖合计、拆单、跨桌隔离、缺少 session 默认拒绝、被拒订单不记账等。在仓库根目录跑：</p>
+      <pre><code>python3 -m unittest discover -s tests -v</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. 状态的四条硬规矩</h2>
+    <ol>
+      <li><strong>状态由 Harness 持有，不由模型持有。</strong>模型可以说“我记得”，但护栏只读订单夹。</li>
+      <li><strong>先读状态检查，再执行，成功后写状态。</strong>顺序反了，就会出现超量、幽灵订单或漏记。</li>
+      <li><strong>session 之间必须隔离。</strong>桌 5 只能看桌 5 的单；跨桌查询返回查无此单。</li>
+      <li><strong>状态要能被工具读回来。</strong>模型不需要直接看订单夹，但需要一个只读工具把“本桌合计 / 订单状态”作为 <code>tool_result</code> 返回。</li>
+    </ol>
+
+    <div class="callout callout--key">
+      <p><strong>一句话：护栏读状态，工具改状态，模型只看结果。</strong>把这句话记住，后面做多轮、多用户、持久化时都不会乱。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. 检查理解</h2>
+    <p>先合上上面的内容，凭记忆选。</p>
+
+    <div class="quiz" data-answer="0" data-hint="再想一步：护栏手里只有这一次调用。" data-explanation="单笔护栏只看 call.args 里的 quantity，看不到 session 里已经有多少杯；所以两单各 10 杯都会放行。">
+      <p class="question">1. 单笔护栏为什么挡不住拆单？</p>
+      <div class="options">
+        <button class="option" type="button">只看本次调用</button>
+        <button class="option" type="button">只查菜单价格</button>
+        <button class="option" type="button">只认模型说法</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：后厨没做成的单，不能算进合计。" data-explanation="订单夹记录事实：工具成功之后才写。拒绝或失败也写，会产生幽灵订单，把后面的正常单挤掉。">
+      <p class="question">2. 成功的订单什么时候写进订单夹？</p>
+      <div class="options">
+        <button class="option" type="button">工具执行之前</button>
+        <button class="option" type="button">工具成功之后</button>
+        <button class="option" type="button">模型说完之后</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="2" data-hint="再想一步：连“存在”都不该确认。" data-explanation="每个 session 只能看自己的订单。跨桌查询返回查无此单，不能泄露订单号是否存在，更不能返回详情。">
+      <p class="question">3. 5 号桌查 3 号桌的订单号，应该？</p>
+      <div class="options">
+        <button class="option" type="button">返回订单详情</button>
+        <button class="option" type="button">返回桌号列表</button>
+        <button class="option" type="button">返回查无此单</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：模型的话可能过期。" data-explanation="订单夹是 Harness 持有的权威状态；模型上下文可能被截断、摘要或说错。护栏读订单夹，不读模型的自述。">
+      <p class="question">4. 模型说点了 5 杯，订单夹写着 10 杯，信谁？</p>
+      <div class="options">
+        <button class="option" type="button">相信模型的话</button>
+        <button class="option" type="button">相信订单夹</button>
+        <button class="option" type="button">相信平均值</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. 这一课没修的设备</h2>
+    <ul>
+      <li><strong>持久化</strong>：订单夹现在只在内存里，进程一重启就没了；真实店铺要落库。</li>
+      <li><strong>并发</strong>：两桌同时下单时，“读合计 → 检查 → 写入”可能撞车；需要事务、锁或原子更新。</li>
+      <li><strong>订单号</strong>：示例里的 <code>order_create</code> 永远返回 <code>B1001</code>；真实系统要生成唯一订单号。</li>
+      <li><strong>状态增长</strong>：订单夹会越来越长；需要归档、摘要和只读查询，不能整本塞回模型上下文。</li>
+      <li><strong>权限分级</strong>：现在只按桌号隔离；店员查单、店长看报表是另一种授权模型。</li>
+      <li><strong>审计</strong>：状态变化还没写进 trace，出了纠纷无法还原“谁在什么时候改了什么”。</li>
+    </ul>
+    <p>下一课：<strong>监控与复盘</strong>——trace / eval。把每一张单、每一次拒绝、每一次状态变化都记下来。</p>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a>，重点读 Factor 5 “Unify execution state and business state”。订单夹就是业务状态，不能只活在模型的上下文里。</p>
+    <p><strong>延伸：</strong><a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">Anthropic · Building Effective Agents</a>，看“状态与上下文分开”如何影响多轮任务的可靠性。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：你觉得订单夹应该由工具自己写，还是由 Harness 统一提交？如果两桌同时下单，先锁桌号还是先锁库存？下一课从你的选择开始。</p>
+  </footer>
+
+</main>
+<script src="../assets/components.js"></script>
+</body>
+</html>

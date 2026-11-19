@@ -70,7 +70,7 @@ class GuardrailRegistryTest(unittest.TestCase):
         class Broken:
             name = "broken"
 
-            def check(self, call):
+            def check(self, call, session=None):
                 raise RuntimeError("规则数据加载失败")
 
         decision = GuardrailRegistry([Broken()]).check(order_call(1))
