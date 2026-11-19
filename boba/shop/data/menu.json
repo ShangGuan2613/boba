@@ -1,0 +1,143 @@
+{
+  "shop": "波波茶铺",
+  "currency": "CNY",
+  "order_prefix": "B",
+  "next_order_number": 1001,
+  "large_size_id": "large",
+  "size_multipliers": {
+    "medium": 1.0,
+    "large": 1.3
+  },
+  "ingredient_labels": {
+    "black_tea_ml": "锡兰红茶",
+    "green_tea_ml": "茉莉绿茶",
+    "oolong_tea_ml": "乌龙茶底",
+    "milk_ml": "鲜奶",
+    "tapioca_g": "黑糖珍珠",
+    "coconut_g": "椰果",
+    "cheese_foam_g": "芝士奶盖",
+    "berry_puree_g": "莓果果酱",
+    "lemon_ml": "香水柠檬汁",
+    "sugar_g": "糖浆"
+  },
+  "items": [
+    {
+      "id": "boba_milk_tea",
+      "name": "珍珠奶茶",
+      "description": "锡兰红茶 + 鲜奶 + 手煮黑糖珍珠",
+      "base_price": 12,
+      "tags": ["招牌", "含奶"],
+      "ingredients": {
+        "black_tea_ml": 200,
+        "milk_ml": 100,
+        "tapioca_g": 50,
+        "sugar_g": 10
+      }
+    },
+    {
+      "id": "cheese_berry",
+      "name": "芝士莓莓",
+      "description": "茉莉绿茶 + 莓果果酱 + 芝士奶盖",
+      "base_price": 18,
+      "tags": ["果茶", "含奶"],
+      "ingredients": {
+        "green_tea_ml": 150,
+        "berry_puree_g": 80,
+        "cheese_foam_g": 40,
+        "sugar_g": 10
+      }
+    },
+    {
+      "id": "four_seasons",
+      "name": "四季春",
+      "description": "四季春乌龙，清爽回甘",
+      "base_price": 10,
+      "tags": ["纯茶"],
+      "ingredients": {
+        "oolong_tea_ml": 200,
+        "sugar_g": 8
+      }
+    },
+    {
+      "id": "lemon_tea",
+      "name": "手打柠檬茶",
+      "description": "鸭屎香单丛 + 手打香水柠檬",
+      "base_price": 11,
+      "tags": ["果茶", "含咖啡因"],
+      "ingredients": {
+        "oolong_tea_ml": 180,
+        "lemon_ml": 40,
+        "sugar_g": 12
+      }
+    }
+  ],
+  "options": {
+    "size": {
+      "label": "杯型",
+      "values": {
+        "medium": "中杯",
+        "large": "大杯"
+      },
+      "default": "medium",
+      "price_delta": {
+        "large": 3
+      }
+    },
+    "ice": {
+      "label": "冰度",
+      "values": {
+        "normal": "正常冰",
+        "less": "少冰",
+        "none": "去冰"
+      },
+      "default": "normal"
+    },
+    "sugar": {
+      "label": "糖度",
+      "values": {
+        "full": "全糖",
+        "half": "半糖",
+        "none": "无糖"
+      },
+      "default": "full"
+    },
+    "toppings": {
+      "label": "小料",
+      "values": {
+        "pearl": "珍珠",
+        "coconut": "椰果",
+        "cheese_foam": "奶盖"
+      },
+      "default": null,
+      "multiple": true,
+      "price_delta": {
+        "pearl": 2,
+        "coconut": 2,
+        "cheese_foam": 3
+      },
+      "ingredients": {
+        "pearl": {
+          "tapioca_g": 30
+        },
+        "coconut": {
+          "coconut_g": 30
+        },
+        "cheese_foam": {
+          "cheese_foam_g": 30
+        }
+      }
+    }
+  },
+  "inventory": {
+    "black_tea_ml": 4000,
+    "green_tea_ml": 3000,
+    "oolong_tea_ml": 3000,
+    "milk_ml": 2500,
+    "tapioca_g": 800,
+    "coconut_g": 400,
+    "cheese_foam_g": 500,
+    "berry_puree_g": 600,
+    "lemon_ml": 1000,
+    "sugar_g": 500
+  }
+}
