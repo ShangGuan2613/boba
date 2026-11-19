@@ -29,14 +29,15 @@
 | 03 | 打烊铃：预算与超时 | 已 review |
 | 04 | 店规：护栏 | 已 review |
 | 05 | 小票与订单夹：状态 / session | 已 review |
-| 06 | 监控录像：trace 与 eval | 已修订，可 review |
+| 06 | 监控录像：trace 与 eval | 已 review |
 | 07 | 并发与状态生命周期 | 暂缓 |
 
 学习进程详见 `PROGRESS.md`。
 
 ## 沉淀
 
-- Notion：https://app.notion.com/p/41d3b41c3823814b99eae1e4cd40425b?pvs=204
+- Notion 主页面（进度 / 关键规则）：https://app.notion.com/p/41d3b41c3823814b99eae1e4cd40425b?pvs=204
+- Notion 六课总结（STD-1000 压缩版）：https://app.notion.com/p/41d3b41c38238133912fe9fdbc6797e5
 - 规则：`CLAUDE.md`
 - STD-1000 v0.1 工作草案：`docs/STD-1000.md`
 - GitHub 学习日志：`PROGRESS.md`

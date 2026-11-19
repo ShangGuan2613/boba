@@ -1,6 +1,8 @@
 # 学习进程
 
 > 这是 GitHub 上可见的学习日志。完整经验与 STAR 记录同步在 [Notion](https://app.notion.com/p/41d3b41c3823814b99eae1e4cd40425b?pvs=204)。
+>
+> 一页纸总结：[六课总结 · STD-1000 压缩版](https://app.notion.com/p/41d3b41c38238133912fe9fdbc6797e5)
 
 ## 课程进度
 
@@ -11,7 +13,7 @@
 | 03 | 打烊铃：预算与超时 | 已 review，Q4 已补课 | `lessons/0003-budget.html` |
 | 04 | 店规：护栏 | 已 review | `lessons/0004-guardrails.html` |
 | 05 | 小票与订单夹：状态 / session | 已 review | `lessons/0005-session.html` |
-| 06 | 监控录像：trace 与 eval | 已修订，待 review | `lessons/0006-trace.html` |
+| 06 | 监控录像：trace 与 eval | 已 review | `lessons/0006-trace.html` |
 | 07 | 并发与状态生命周期 | 暂缓 | — |
 
 ## 2026-11-19 · 第 1 课 review
@@ -305,3 +307,7 @@
 ### 判断
 
 技术准确性没变，变的是讲解顺序：先讲店里发生什么，再映射到代码。第 6 课重新进入可 review 状态。
+
+### 学习者确认
+
+2026-11-19：第 6 课“很简单，做完了”，通过。当前总测试 45 个通过。
