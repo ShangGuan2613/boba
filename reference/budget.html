@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference · 预算与超时速查</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="reference">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Reference</p>
+    <h1>预算与超时速查</h1>
+    <p class="lede">一页纸：三个闸门装在哪、什么时候检查、铃响后顾客看到什么。</p>
+    <p class="meta"><a href="../lessons/0003-budget.html">← Lesson 03</a> · <a href="../lessons/0002-tool-protocol.html">Lesson 02</a> · <a href="harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>三个闸门</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>闸门</th>
+            <th>限制什么</th>
+            <th>默认值</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>max_turns</code></td>
+            <td>模型调用轮数</td>
+            <td>8</td>
+            <td><code>max_turns</code></td>
+          </tr>
+          <tr>
+            <td><code>max_tool_calls</code></td>
+            <td>工具执行次数</td>
+            <td>16</td>
+            <td><code>max_tool_calls</code></td>
+          </tr>
+          <tr>
+            <td><code>max_seconds</code></td>
+            <td>墙钟时间</td>
+            <td>60 秒</td>
+            <td><code>timeout</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>硬限制，不是提示词建议。</strong>检查放在动作之前：先看额度，再决定做不做。</p>
+  </section>
+
+  <section>
+    <h2>检查位置</h2>
+<pre><code>while True:
+    budget.start_turn()          # 模型调用前
+    turn = model(messages)
+
+    if turn.type == "text":
+        return ok(turn.text)
+
+    for call in turn.tool_calls:
+        budget.start_tool()      # 工具执行前
+        result = registry.run(call)
+        messages.append(result)</code></pre>
+    <p><strong>每个闸门只拦自己的动作：</strong><code>max_turns</code> 只拦模型调用，<code>max_tool_calls</code> 只拦工具执行；<code>max_seconds</code> 两个都拦。工具额度用完后，仍允许一个不带工具的收尾回合。</p>
+  </section>
+
+  <section>
+    <h2>铃响之后</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>状态</th>
+            <th>给顾客</th>
+            <th>不要做</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>max_turns</code></td>
+            <td>“今天先聊到这里……稍后人工同事跟进。”</td>
+            <td>继续硬聊</td>
+          </tr>
+          <tr>
+            <td><code>max_tool_calls</code></td>
+            <td>“今天先做到这里，您这杯已经排上……”</td>
+            <td>假装已经出杯</td>
+          </tr>
+          <tr>
+            <td><code>timeout</code></td>
+            <td>“现在排队比较久，我先帮您留单……”</td>
+            <td>让顾客继续干等</td>
+          </tr>
+          <tr>
+            <td><code>ok</code></td>
+            <td>正常结果</td>
+            <td>多问已经答过的</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p><strong>状态给日志，message 给顾客。</strong>不要把内部暗号直接甩给顾客。</p>
+  </section>
+
+  <section>
+    <h2>收尾时的 invariant</h2>
+    <p>如果铃响时手里还有没执行的 <code>tool_use</code>，也要回一张 <code>tool_result</code>，<code>is_error: true</code>，<code>code: budget_exhausted</code>。第 2 课的“每个调用都有结果”不能破。</p>
+<pre><code>{"tool_use_id": "call_17", "is_error": true,
+ "content": {"ok": false, "error": {
+   "code": "budget_exhausted",
+   "message": "max_tool_calls 已用完",
+   "hint": "停止并交接，不要继续试。"}}}</code></pre>
+  </section>
+
+  <section>
+    <h2>trace 形状</h2>
+<pre><code>run.start        budget={"max_turns": 8, "max_tool_calls": 16, "max_seconds": 60}
+model.turn 1     tool_use inventory_check
+tool.result      call_1  tool_failed
+budget.exhausted status=max_tool_calls
+                 used={"turns": 3, "tool_calls": 16, "elapsed": 12.4}
+tool.result      call_17 budget_exhausted
+run.end          status=max_tool_calls</code></pre>
+  </section>
+
+  <section>
+    <h2>常见 Bug</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>症状</th>
+            <th>根因</th>
+            <th>修复</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>循环停不下来</td>
+            <td>只在提示词里写“请尽快”</td>
+            <td>代码里检查三个预算</td>
+          </tr>
+          <tr>
+            <td>总是多花一次工具调用</td>
+            <td>做完才检查</td>
+            <td>动手前检查并扣减</td>
+          </tr>
+          <tr>
+            <td>顾客收到空白</td>
+            <td>预算异常逃出循环</td>
+            <td>捕获并返回 fallback message</td>
+          </tr>
+          <tr>
+            <td><code>tool_use</code> 没有结果</td>
+            <td>铃响后直接 break</td>
+            <td>补 <code>budget_exhausted</code> 结果</td>
+          </tr>
+          <tr>
+            <td>分不清是时间还是次数</td>
+            <td>没有 trace / 状态</td>
+            <td>记录 status 与 used</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>术语</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>术语</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>max_turns</code></td>
+            <td>一次 run 里最多调用模型几次。</td>
+          </tr>
+          <tr>
+            <td><code>max_tool_calls</code></td>
+            <td>一次 run 里最多执行工具几次。</td>
+          </tr>
+          <tr>
+            <td><code>max_seconds</code></td>
+            <td>一次 run 的墙钟上限。</td>
+          </tr>
+          <tr>
+            <td><code>budget_exhausted</code></td>
+            <td>铃响时回给待执行工具调用的错误码。</td>
+          </tr>
+          <tr>
+            <td>fallback message</td>
+            <td>铃响后给顾客的说明，不是内部状态原文。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>一手来源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents · Factor 8: Own your control flow</a></p>
+    <p class="ask">每次加工具或改循环，回来对一遍：闸门在不在？检查在动作前还是后？铃响后顾客看到什么？</p>
+  </footer>
+
+</main>
+</body>
+</html>

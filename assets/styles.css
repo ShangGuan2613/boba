@@ -337,6 +337,12 @@ button:hover { background: var(--tapioca); }
 
 button:active { transform: translateY(1px); }
 
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+
 button:focus-visible {
   outline: 3px solid color-mix(in srgb, var(--caramel) 35%, transparent);
   outline-offset: 2px;
@@ -531,6 +537,85 @@ tbody tr:hover { background: var(--milk-2); }
   white-space: nowrap;
 }
 
+/* Budget simulator */
+
+.budget-sim {
+  margin: 22px 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  transition: border-color 180ms ease;
+}
+
+.budget-sim.is-closed { border-color: var(--berry); }
+
+.budget-meters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+.budget-meter-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-family: var(--sans);
+  font-size: 0.76rem;
+  color: var(--tea-soft);
+}
+
+.budget-meter-label strong { color: var(--tea); }
+
+.budget-bar {
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 999px;
+  background: var(--milk-2);
+  overflow: hidden;
+}
+
+.budget-bar i {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--matcha);
+  transition: width 180ms ease, background 180ms ease;
+}
+
+.budget-bar i.is-warn { background: var(--berry); }
+
+.budget-log {
+  min-height: 4.5em;
+  margin: 14px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--milk-2);
+  font-family: var(--sans);
+  font-size: 0.84rem;
+  line-height: 1.55;
+}
+
+.budget-log p { margin: 0 0 6px; }
+
+.budget-log p:last-child { margin-bottom: 0; }
+
+.budget-log .bell {
+  color: var(--berry);
+  font-weight: 700;
+}
+
+.budget-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 620px) {
+  .budget-meters { grid-template-columns: 1fr; }
+}
+
 /* Flow diagram */
 
 .flow {
@@ -649,13 +734,15 @@ tbody tr:hover { background: var(--milk-2); }
 
   .lesson, .reference { max-width: none; padding: 0; }
 
-  .loop-controls, button, .scenario-tabs { display: none !important; }
+  .loop-controls, button, .scenario-tabs, .budget-actions { display: none !important; }
 
   .loop-card { opacity: 1; }
 
   .quiz .feedback { display: block; }
 
   .scenario-panel { display: block; break-inside: avoid; }
+
+  .budget-sim { break-inside: avoid; }
 
   a { color: #111; text-decoration: underline; }
 

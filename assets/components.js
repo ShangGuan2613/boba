@@ -95,15 +95,128 @@
     });
   }
 
+  function initBudgetSim() {
+    var root = document.getElementById("budget-sim");
+    if (!root) return;
+
+    var maxTools = parseInt(root.getAttribute("data-max-tool-calls"), 10);
+    var maxTurns = parseInt(root.getAttribute("data-max-turns"), 10);
+    var maxSeconds = parseInt(root.getAttribute("data-max-seconds"), 10);
+    var callBtn = document.getElementById("budget-call");
+    var waitBtn = document.getElementById("budget-wait");
+    var resetBtn = document.getElementById("budget-reset");
+    var log = root.querySelector(".budget-log");
+    if (!callBtn || !waitBtn || !resetBtn || !log) return;
+
+    var state = { tools: 0, turns: 0, seconds: 0, stopped: false };
+
+    function meter(name) {
+      return root.querySelector('[data-meter="' + name + '"]');
+    }
+
+    function bar(name) {
+      return root.querySelector('[data-bar="' + name + '"]');
+    }
+
+    function paint(name, value, max, suffix) {
+      var label = meter(name);
+      var fill = bar(name);
+      if (label) label.textContent = value + " / " + max + (suffix || "");
+      if (fill) {
+        fill.style.width = Math.min(100, (value / max) * 100) + "%";
+        fill.classList.toggle("is-warn", value >= max);
+      }
+    }
+
+    function render() {
+      paint("tools", state.tools, maxTools, "");
+      paint("turns", state.turns, maxTurns, "");
+      paint("seconds", state.seconds, maxSeconds, " 秒");
+    }
+
+    function addLog(text, bell) {
+      var p = document.createElement("p");
+      if (bell) p.className = "bell";
+      p.textContent = text;
+      log.appendChild(p);
+      while (log.children.length > 6) log.removeChild(log.firstChild);
+    }
+
+    function stop(status, message) {
+      state.stopped = true;
+      root.classList.add("is-closed");
+      addLog("叮——打烊铃。状态：" + status, true);
+      addLog("给顾客的小票：" + message, false);
+      callBtn.disabled = true;
+      waitBtn.disabled = true;
+      render();
+    }
+
+    function check() {
+      if (state.seconds >= maxSeconds) {
+        stop("timeout", "现在排队比较久，我先帮您留单，稍后再试。");
+        return true;
+      }
+      if (state.turns >= maxTurns) {
+        stop("max_turns", "今天先聊到这里，您要的我都记下了，稍后人工同事跟进。");
+        return true;
+      }
+      if (state.tools >= maxTools) {
+        stop("max_tool_calls", "今天先做到这里，您这杯已经排上，稍后确认。");
+        return true;
+      }
+      return false;
+    }
+
+    callBtn.addEventListener("click", function () {
+      if (state.stopped || check()) return;
+
+      state.turns += 1;
+      state.tools += 1;
+      addLog("第 " + state.turns + " 轮：模型决定调用工具，后厨开做。");
+
+      if (state.tools >= maxTools) {
+        addLog("工具额度用完了；下一次调用会被打烊铃拦下。");
+      } else if (state.turns >= maxTurns) {
+        addLog("对话轮数额度用完了；下一轮会被拦下。");
+      }
+      render();
+    });
+
+    waitBtn.addEventListener("click", function () {
+      if (state.stopped) return;
+      state.seconds += 10;
+      addLog("顾客又等了 10 秒。");
+      render();
+      check();
+    });
+
+    resetBtn.addEventListener("click", function () {
+      state.tools = 0;
+      state.turns = 0;
+      state.seconds = 0;
+      state.stopped = false;
+      root.classList.remove("is-closed");
+      callBtn.disabled = false;
+      waitBtn.disabled = false;
+      log.innerHTML = "<p>店刚开门，预算充足。</p>";
+      render();
+    });
+
+    render();
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       initLoop();
       initQuizzes();
       initScenarios();
+      initBudgetSim();
     });
   } else {
     initLoop();
     initQuizzes();
     initScenarios();
+    initBudgetSim();
   }
 })();

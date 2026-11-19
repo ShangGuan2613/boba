@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 03 · 打烊铃：给循环一个尽头</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="lesson">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Lesson 03</p>
+    <h1>打烊铃：给循环一个尽头</h1>
+    <p class="lede">模型只负责下一杯；它不会看表，也不会数自己调了多少次工具。店长必须在墙上装三个闸门。</p>
+    <p class="meta">约 14 分钟 · 前置 <a href="0002-tool-protocol.html">Lesson 02</a> · <a href="../reference/budget.html">预算速查</a> · <a href="../reference/harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>1. 一家永远不打烊的店</h2>
+    <p>晚上十点，最后一单。库存传感器坏了，后厨窗口回了一张退单小票：<code>tool_failed</code>。前台（模型）看到失败，决定再试一次；窗口又回 <code>tool_failed</code>；再试……</p>
+
+<pre><code>call_1   inventory_check  →  tool_failed
+call_2   inventory_check  →  tool_failed
+call_3   inventory_check  →  tool_failed
+...
+call_41  inventory_check  →  tool_failed</code></pre>
+
+    <p>模型没有“我该停了”的概念。它只会根据上下文生成下一步；<strong>你不喊停，它就继续</strong>。顾客等到打烊，店长（Harness）还在后厨门口陪着排队。</p>
+    <p>问题不在模型笨，而在店里没有铃。</p>
+  </section>
+
+  <section>
+    <h2>2. 墙上三个闸门</h2>
+    <p>店长要在墙上装三个硬闸门。它们不是提示词里的“请尽快”，是循环里的代码检查：</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>闸门</th>
+            <th>店里的话</th>
+            <th>默认值</th>
+            <th>铃响后的状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>max_turns</code></td>
+            <td>最多接待几轮</td>
+            <td>8 轮</td>
+            <td><code>max_turns</code></td>
+          </tr>
+          <tr>
+            <td><code>max_tool_calls</code></td>
+            <td>最多做几次工具</td>
+            <td>16 次</td>
+            <td><code>max_tool_calls</code></td>
+          </tr>
+          <tr>
+            <td><code>max_seconds</code></td>
+            <td>最多让顾客等多久</td>
+            <td>60 秒</td>
+            <td><code>timeout</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout--key">
+      <p><strong>预算是店规，不是建议。</strong>模型不能自己决定加班；闸门装在 Harness 里，到点就落闸。</p>
+    </div>
+
+    <p>还有一条同样重要：<strong>检查要放在花钱之前</strong>。先看额度，再决定要不要做。做完才检查，预算就变成了“事后道歉”。</p>
+  </section>
+
+  <section>
+    <h2>3. 打烊铃模拟器</h2>
+    <p>每点一次“调用工具”＝模型决定做一轮并调用一次工具；也可以让顾客继续等。看额度怎么被扣完，铃响后顾客收到什么。</p>
+
+    <div class="budget-sim" id="budget-sim" data-max-tool-calls="3" data-max-turns="5" data-max-seconds="30">
+      <div class="budget-meters">
+        <div class="budget-meter">
+          <div class="budget-meter-label"><span>工具调用</span><strong data-meter="tools">0 / 3</strong></div>
+          <div class="budget-bar"><i data-bar="tools"></i></div>
+        </div>
+        <div class="budget-meter">
+          <div class="budget-meter-label"><span>对话轮数</span><strong data-meter="turns">0 / 5</strong></div>
+          <div class="budget-bar"><i data-bar="turns"></i></div>
+        </div>
+        <div class="budget-meter">
+          <div class="budget-meter-label"><span>等待时间</span><strong data-meter="seconds">0 / 30 秒</strong></div>
+          <div class="budget-bar"><i data-bar="seconds"></i></div>
+        </div>
+      </div>
+
+      <div class="budget-log" aria-live="polite">
+        <p>店刚开门，预算充足。</p>
+      </div>
+
+      <div class="budget-actions">
+        <button type="button" id="budget-call">模型再调用一次工具</button>
+        <button type="button" id="budget-wait" class="secondary">让顾客再等 10 秒</button>
+        <button type="button" id="budget-reset" class="secondary">重新开张</button>
+      </div>
+    </div>
+
+    <p>注意两件事：第一，额度用完后的那一次调用，工具<strong>没有执行</strong>；第二，铃响后顾客仍收到一张说明小票，不是空白。</p>
+  </section>
+
+  <section>
+    <h2>4. 代码：闸门放在花钱之前</h2>
+    <p>先看预算本身。它只管三件事：数轮数、数工具、看表。</p>
+
+<pre><code>@dataclass
+class Budget:
+    max_turns: int = 8
+    max_tool_calls: int = 16
+    max_seconds: float = 60.0
+    turns: int = 0
+    tool_calls: int = 0
+
+    def _check_timeout(self):
+        if self.elapsed &gt;= self.max_seconds:
+            raise BudgetExceeded("timeout", ...)
+
+    def start_turn(self):
+        self._check_timeout()
+        if self.turns &gt;= self.max_turns:
+            raise BudgetExceeded("max_turns", ...)
+        self.turns += 1        # 再扣一轮
+
+    def start_tool(self):
+        self._check_timeout()
+        if self.tool_calls &gt;= self.max_tool_calls:
+            raise BudgetExceeded("max_tool_calls", ...)
+        self.tool_calls += 1   # 再扣一次</code></pre>
+
+    <p>每个闸门只拦自己的动作：<strong>轮数闸门只管模型调用，工具闸门只管工具执行；超时两个都管。</strong>这样最后一轮仍然可以调用工具，工具额度用完后也还能留一个收尾回合——只要模型不再要工具。</p>
+
+    <p>把它放进第 1 课的循环里，闸门就在两个地方落下：</p>
+
+<pre><code>try:
+    while True:
+        budget.start_turn()              # 进门先看表
+        turn = model(messages)
+
+        if turn.type == "text":
+            return RunResult(status="ok", message=turn.text)
+
+        for call in turn.tool_calls:
+            budget.start_tool()          # 动手前再看一次
+            result = registry.run(call)
+            messages.append(result)
+
+except BudgetExceeded as stop:
+    if pending_call:
+        messages.append(budget_error(pending_call.id, stop.status))
+    return RunResult(status=stop.status, message=stop.user_message)</code></pre>
+
+    <p>最后那段 <code>pending_call</code> 是第 2 课 invariant 的延续：<strong>铃响时手里还攥着一张没做的单子，也要回一张 <code>budget_exhausted</code> 小票。</strong>不能因为要打烊，就把 <code>tool_use</code> 晾在那里。</p>
+
+    <div class="callout">
+      <p><strong>完整可运行代码：</strong><code>boba/budget.py</code>。五个测试覆盖轮数上限、工具上限、超时、优先级和用量快照。在仓库根目录跑：</p>
+      <pre><code>python3 -m unittest discover -s tests -v</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. 铃响之后，顾客不能看到空白</h2>
+    <p>闸门是给 Harness 看的，不是给顾客看的。顾客只该听到一句人话：</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>状态</th>
+            <th>店里的话</th>
+            <th>顾客看到</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>max_turns</code></td>
+            <td>今天聊得够久了</td>
+            <td>“今天先聊到这里，您要的我都记下了，稍后人工同事跟进。”</td>
+          </tr>
+          <tr>
+            <td><code>max_tool_calls</code></td>
+            <td>后厨做不过来了</td>
+            <td>“今天先做到这里，您这杯已经排上，稍后确认。”</td>
+          </tr>
+          <tr>
+            <td><code>timeout</code></td>
+            <td>排队太久了</td>
+            <td>“现在排队比较久，我先帮您留单，稍后再试。”</td>
+          </tr>
+          <tr>
+            <td><code>ok</code></td>
+            <td>正常出杯</td>
+            <td>“中杯少冰三分糖，12 元，大约 6 分钟。”</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout callout--warn">
+      <p><strong>状态给日志，message 给顾客。</strong>不要把 <code>max_tool_calls</code>、<code>timeout</code> 这种内部暗号直接甩给顾客，也不要用“系统繁忙”糊弄过去。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. trace 里也要有铃声</h2>
+    <p>铃响以后，店长要能回答：是轮数、工具数，还是时间？当时已经做了多少？没有 trace，只剩一句“好像卡住了”。</p>
+
+<pre><code>run.start        budget={"max_turns": 8, "max_tool_calls": 16, "max_seconds": 60}
+model.turn 1     tool_use inventory_check
+tool.result      call_1  tool_failed
+...
+budget.exhausted status=max_tool_calls
+                 used={"turns": 3, "tool_calls": 16, "elapsed": 12.4}
+tool.result      call_17 budget_exhausted
+run.end          status=max_tool_calls</code></pre>
+
+    <p>trace 让“打烊”变成一个可复盘的事件，而不是一次神秘消失。</p>
+  </section>
+
+  <section>
+    <h2>7. 检查理解</h2>
+    <p>先合上上面的内容，凭记忆选。</p>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：做完才检查，已经多花了一次。" data-explanation="预算要在动作开始前检查；超了就不做，才不会多花一次工具调用或一轮模型。">
+      <p class="question">1. 预算检查应该放在什么时候？</p>
+      <div class="options">
+        <button class="option" type="button">花钱之后再检查</button>
+        <button class="option" type="button">花钱之前先检查</button>
+        <button class="option" type="button">只检查模型的话</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="2" data-hint="再想一步：模型不会自己看表，也不会自己数。" data-explanation="预算是 Harness 里的代码硬限制；提示词请求和模型自数都不可靠，不能当闸门。">
+      <p class="question">2. 哪种做法才算真正的预算？</p>
+      <div class="options">
+        <button class="option" type="button">提示词里请求</button>
+        <button class="option" type="button">让模型自己数</button>
+        <button class="option" type="button">代码里硬限制</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="2" data-hint="再想一步：顾客不该看到空白，也不该被假装成功。" data-explanation="预算耗尽也要给顾客一张说明小票：说清楚发生了什么、下一步怎么办，而不是沉默或假装成功。">
+      <p class="question">3. 打烊铃响后，顾客应该看到什么？</p>
+      <div class="options">
+        <button class="option" type="button">空白，没有回复</button>
+        <button class="option" type="button">假装已经做好了</button>
+        <button class="option" type="button">给一张说明小票</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>8. 这一课没修的设备</h2>
+    <ul>
+      <li><strong>工具挂死</strong>：现在只在调用前后看表；工具自己卡住，不会被打断。真中断需要线程 / 子进程超时。</li>
+      <li><strong>单工具预算</strong>：没有限制某个工具最多查几次，比如库存查询不能刷 100 次。</li>
+      <li><strong>token 预算</strong>：没有限制上下文长度，长对话仍可能撑爆窗口。</li>
+      <li><strong>重试与退避</strong>：没有自动重试，失败先交回前台。</li>
+      <li><strong>限流</strong>：没有按顾客或门店限流。</li>
+    </ul>
+    <p>下一课：<strong>店规</strong>——护栏。预算管“做多少”，护栏管“能不能做”。</p>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a>，重点读 Factor 8 “Own your control flow”。循环什么时候继续、什么时候停，是 Harness 的决定，不是模型的决定。</p>
+    <p><strong>延伸：</strong><a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">Anthropic · Building Effective Agents</a>，看 agent 的成本与 compounding errors 部分。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>如果你觉得预算该由模型自己判断，或者 60 秒太长 / 太短，直接说——下一课从分歧开始。</p>
+  </footer>
+
+</main>
+<script src="../assets/components.js"></script>
+</body>
+</html>
