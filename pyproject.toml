@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "boba"
+version = "0.1.0"
+description = "用一间奶茶店讲清楚并实现 Agent Harness：循环、工具、护栏、小票式 trace。"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "ShangGuan2613" }]
+keywords = ["agent", "harness", "llm", "milk-tea", "trace"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=0.40"]
+
+[project.scripts]
+boba = "boba.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["boba*"]
+
+[tool.setuptools.package-data]
+"boba.shop" = ["data/*.json"]
