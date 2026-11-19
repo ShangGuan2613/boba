@@ -103,9 +103,13 @@ MENU: dict[str, dict[str, Any]] = {
 }
 
 
-def order_create(item: str, size: str, ice: str, sugar: str) -> dict[str, Any]:
+def order_create(
+    item: str, size: str, ice: str, sugar: str, quantity: int = 1
+) -> dict[str, Any]:
     if item not in MENU:
         raise ValueError(f"菜单里没有 {item}")
+    if not isinstance(quantity, int) or isinstance(quantity, bool) or quantity < 1:
+        raise ValueError("quantity 必须是正整数")
     menu_item = MENU[item]
     return {
         "order_id": "B1001",
@@ -113,7 +117,8 @@ def order_create(item: str, size: str, ice: str, sugar: str) -> dict[str, Any]:
         "size": size,
         "ice": ice,
         "sugar": sugar,
-        "total": menu_item["price"],
+        "quantity": quantity,
+        "total": menu_item["price"] * quantity,
     }
 
 
@@ -130,7 +135,7 @@ def build_registry() -> ToolRegistry:
                 name="order_create",
                 description="创建一杯奶茶订单",
                 required=("item", "size", "ice", "sugar"),
-                properties=("item", "size", "ice", "sugar"),
+                properties=("item", "size", "ice", "sugar", "quantity"),
                 fn=order_create,
             ),
             Tool(

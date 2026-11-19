@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lesson 04 · 店规：有些单，后厨不能接</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="lesson">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Lesson 04</p>
+    <h1>店规：有些单，后厨不能接</h1>
+    <p class="lede">预算管“做多少”，护栏管“能不能做”。模型再会说话，也不能绕过店规。</p>
+    <p class="meta">约 14 分钟 · 前置 <a href="0003-budget.html">Lesson 03</a> · <a href="../reference/guardrails.html">护栏速查</a> · <a href="../reference/harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>1. 最危险的失败，是“成功执行了不该做的事”</h2>
+    <p>一位顾客走进店里：“来 20 杯珍珠奶茶，公司团建。”</p>
+    <p>前台（模型）没有店规概念。它看到需求，生成调用：</p>
+
+<pre><code>model.turn      tool_use  order_create(quantity=20)
+tool.result     ok        B1001，20 杯，240 元
+run.end         ok</code></pre>
+
+    <p>没有报错，没有异常，循环正常结束。但这 20 杯把今天剩下的珍珠全用完了，后面的顾客一杯也买不到。</p>
+    <p><strong>工具协议防的是“做失败”，护栏防的是“做成功但不该做”。</strong>模型不会自己想起店规；你不拦，它就照做。</p>
+  </section>
+
+  <section>
+    <h2>2. 店规贴在窗口上</h2>
+    <p>店规不是收银台旁边的小字，也不是提示词里的一句“请不要超过 10 杯”。它是窗口在接单前必须执行的检查：</p>
+
+    <div class="callout callout--key">
+      <p><strong>护栏是代码级否决：在工具执行之前检查；拒绝时回一张 <code>permission_denied</code> 小票，工具一次都不执行。</strong></p>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>预算（Lesson 03）</th>
+            <th>护栏（本课）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>管什么</td>
+            <td>做多少：轮数、次数、时间</td>
+            <td>能不能做：数量、年龄、权限、库存红线</td>
+          </tr>
+          <tr>
+            <td>检查点</td>
+            <td>模型 / 工具动作之前</td>
+            <td>工具执行之前</td>
+          </tr>
+          <tr>
+            <td>拒绝后</td>
+            <td>收尾，给 fallback message</td>
+            <td>模型解释规则，循环可以继续</td>
+          </tr>
+          <tr>
+            <td>状态 / 错误码</td>
+            <td><code>max_turns</code>、<code>max_tool_calls</code>、<code>timeout</code></td>
+            <td><code>permission_denied</code>、<code>invalid_quantity</code></td>
+          </tr>
+          <tr>
+            <td>自己坏了</td>
+            <td>硬停</td>
+            <td>默认拒绝（fail closed）</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>3. 四种单子，窗口接不接</h2>
+    <p>点标签，看同一套店规在不同单子前怎么反应。注意最后一单：它暴露了本课护栏的一个洞。</p>
+
+    <div class="scenario" id="guardrail-scenario">
+      <div class="scenario-tabs" role="tablist" aria-label="护栏场景">
+        <button class="scenario-tab is-active" type="button" role="tab" aria-selected="true" data-target="g1">5 杯</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="g2">11 杯</button>
+        <button class="scenario-tab" type="button" role="tab" aria-selected="false" data-target="g3">20 杯拆两单</button>
+      </div>
+
+      <div class="scenario-panel is-active" id="g1" role="tabpanel">
+        <h3>5 杯：正常接单</h3>
+<pre><code>调用
+{"tool_use_id": "call_1", "name": "order_create",
+ "args": {"item": "boba_milk_tea", "quantity": 5, ...}}
+
+回填
+{"tool_use_id": "call_1", "is_error": false,
+ "content": {"ok": true, "data": {"order_id": "B1001",
+   "quantity": 5, "total": 60}}}</code></pre>
+        <p class="scenario-next"><strong>后厨：</strong>动手做了 5 杯。护栏放行。</p>
+      </div>
+
+      <div class="scenario-panel" id="g2" role="tabpanel">
+        <h3>11 杯：超过单笔上限</h3>
+<pre><code>调用
+{"tool_use_id": "call_2", "name": "order_create",
+ "args": {"item": "boba_milk_tea", "quantity": 11, ...}}
+
+回填
+{"tool_use_id": "call_2", "is_error": true,
+ "content": {"ok": false, "error": {
+   "code": "permission_denied",
+   "message": "单笔最多 10 杯，这次是 11 杯。",
+   "hint": "不要自动拆单绕过；先向顾客解释店规，必要时转人工。"}}}</code></pre>
+        <p class="scenario-next"><strong>后厨：</strong>一次都没动手。前台转头对顾客解释店规。</p>
+      </div>
+
+      <div class="scenario-panel" id="g3" role="tabpanel">
+        <h3>20 杯拆两单：每单 10 杯</h3>
+<pre><code>call_1  order_create(quantity=10)  →  ok，B1001
+call_2  order_create(quantity=10)  →  ok，B1002
+
+合计：20 杯。两条护栏各自都通过。</code></pre>
+        <p class="scenario-next"><strong>后厨：</strong>做了 20 杯。这就是本课护栏的洞：它只看单笔，不看这次会话一共做了多少。下一课用 session 级规则补。</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>4. 代码：先过店规，再让工具动手</h2>
+    <p>一条护栏只回答一个“能 / 不能”。单笔上限大概长这样：</p>
+
+<pre><code>class MaxCupsPerOrder:
+    name = "max_cups_per_order"
+
+    def __init__(self, limit=10):
+        self.limit = limit
+
+    def check(self, call):
+        if call.name != "order_create":
+            return ALLOW
+
+        quantity = call.args.get("quantity", 1)
+        if quantity &gt; self.limit:
+            return GuardrailDecision(
+                False,
+                "permission_denied",
+                f"单笔最多 {self.limit} 杯，这次是 {quantity} 杯。",
+                "不要自动拆单绕过；先向顾客解释店规，必要时转人工。",
+            )
+        return ALLOW</code></pre>
+
+    <p>接线的地方只有一个：工具执行之前。</p>
+
+<pre><code>def run_guarded(call, tools, guardrails):
+    decision = guardrails.check(call)
+
+    if not decision.allowed:
+        return denied_result(call, decision)   # 回一张退单小票
+
+    return tools.run(call)                     # 只有放行才动手</code></pre>
+
+    <p>被拒绝时，<code>tools.run</code> 一次都不会执行；顾客收到的是 <code>permission_denied</code>，不是“工具坏了”。模型可以解释、可以建议减少数量、可以转人工，但不能自己拆单绕过。</p>
+
+    <div class="callout">
+      <p><strong>完整可运行代码：</strong><code>boba/guardrails.py</code>。9 个测试覆盖放行、拒绝、非法数量、失败关闭、拒绝不执行工具等。在仓库根目录跑：</p>
+      <pre><code>python3 -m unittest discover -s tests -v</code></pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>5. 护栏的三条硬规矩</h2>
+    <ol>
+      <li><strong>写在代码里，不写在提示词里。</strong>“请不要超过 10 杯”是建议；<code>quantity &gt; 10</code> 才是店规。</li>
+      <li><strong>检查在工具执行之前。</strong>做完再拒绝，原料已经用掉了。</li>
+      <li><strong>拒绝也要回 <code>tool_result</code>。</strong><code>permission_denied</code> 是模型能读懂的结果，不是异常。</li>
+    </ol>
+
+    <div class="callout callout--warn">
+      <p><strong>失败关闭（fail closed）：</strong>护栏自己抛异常时，默认拒绝，而不是放行。店规系统坏了，不能当作“今天没有店规”。</p>
+    </div>
+  </section>
+
+  <section>
+    <h2>6. 检查理解</h2>
+    <p>先合上上面的内容，凭记忆选。</p>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：提示词不是店规。" data-explanation="护栏要在工具执行之前做代码检查；提示词提醒和事后检查都拦不住已经发生的动作。">
+      <p class="question">1. 护栏应该放在哪里？</p>
+      <div class="options">
+        <button class="option" type="button">提示词里提醒</button>
+        <button class="option" type="button">工具执行之前</button>
+        <button class="option" type="button">工具失败之后</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="2" data-hint="再想一步：拆单绕过正是店规要防的。" data-explanation="护栏拒绝后，模型应该向顾客解释规则，必要时转人工；自动拆单、假装成功都是绕过。">
+      <p class="question">2. 护栏拒绝后，模型最该做什么？</p>
+      <div class="options">
+        <button class="option" type="button">自动拆单绕过去</button>
+        <button class="option" type="button">假装已经下单了</button>
+        <button class="option" type="button">向顾客解释规则</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="1" data-hint="再想一步：店规系统坏了，不能当作没有店规。" data-explanation="护栏必须失败关闭：自己抛异常时默认拒绝，宁可转人工，也不能放行。">
+      <p class="question">3. 护栏自己抛异常，应该？</p>
+      <div class="options">
+        <button class="option" type="button">默认放行</button>
+        <button class="option" type="button">默认拒绝</button>
+        <button class="option" type="button">跳过护栏</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+
+    <div class="quiz" data-answer="0" data-hint="再想一步：护栏只看自己收到的这一张单。" data-explanation="单笔护栏看不到两张单的合计；拆成两单各 10 杯都会放行。要堵这个洞，需要 session 级的总量规则。">
+      <p class="question">4. 单笔限 10 杯，拆两单各 10 杯，本课护栏会？</p>
+      <div class="options">
+        <button class="option" type="button">两单都放行</button>
+        <button class="option" type="button">两单都拒绝</button>
+        <button class="option" type="button">只拒第二单</button>
+      </div>
+      <p class="feedback" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section>
+    <h2>7. 这一课没修的设备</h2>
+    <ul>
+      <li><strong>拆单绕过</strong>：单笔上限挡不住“两单各 10 杯”；需要 session 级总量规则。</li>
+      <li><strong>动态规则</strong>：年龄 / 身份证、库存红线、黑名单，还没有数据源。</li>
+      <li><strong>规则组合</strong>：现在第一条拒绝生效，还没有优先级和策略引擎。</li>
+      <li><strong>审计</strong>：护栏拒绝还没写进 trace，只能从结果反推。</li>
+      <li><strong>人工转接</strong>：hint 里说“转人工”，但还没有真正的交接通道。</li>
+    </ul>
+    <p>下一课：<strong>小票与订单夹</strong>——状态 / session。先补上“拆单”这个洞。</p>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a>，重点读 Factor 7 “Contact humans with tool calls”和 Factor 8 “Own your control flow”。店规和人工转接都属于控制流。</p>
+    <p><strong>延伸：</strong><a href="https://openai.com/index/harness-engineering/" rel="noopener">OpenAI · Harness Engineering</a>，看“结构性约束”如何把规则放进环境，而不是放进提示词。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：如果你觉得拆单应该直接允许，或者护栏坏了应该放行，直接说——下一课从分歧开始。</p>
+  </footer>
+
+</main>
+<script src="../assets/components.js"></script>
+</body>
+</html>

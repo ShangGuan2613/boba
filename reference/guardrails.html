@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference · 护栏速查</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="reference">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Reference</p>
+    <h1>护栏速查</h1>
+    <p class="lede">一页纸：店规写在哪、拒绝长什么样、模型下一步能做什么。</p>
+    <p class="meta"><a href="../lessons/0004-guardrails.html">← Lesson 04</a> · <a href="../lessons/0003-budget.html">Lesson 03</a> · <a href="harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>一句话</h2>
+    <div class="formula">
+      <span class="model">工具执行之前</span>
+      <span class="plus">→</span>
+      <span class="harness">代码级否决</span>
+      <span class="plus">→</span>
+      <span class="model">permission_denied</span>
+    </div>
+    <p><strong>预算管“做多少”，护栏管“能不能做”。</strong>护栏不是提示词建议，是工具执行前的硬检查；拒绝时工具一次都不执行，但必须回一个 <code>tool_result</code>。</p>
+  </section>
+
+  <section>
+    <h2>护栏 vs 预算</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th></th>
+            <th>预算</th>
+            <th>护栏</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>管什么</td>
+            <td>轮数、工具次数、时间</td>
+            <td>数量、年龄、权限、库存红线</td>
+          </tr>
+          <tr>
+            <td>检查点</td>
+            <td>模型 / 工具动作之前</td>
+            <td>工具执行之前</td>
+          </tr>
+          <tr>
+            <td>拒绝后</td>
+            <td>收尾</td>
+            <td>解释规则，循环可继续</td>
+          </tr>
+          <tr>
+            <td>错误码</td>
+            <td><code>max_turns</code> / <code>max_tool_calls</code> / <code>timeout</code></td>
+            <td><code>permission_denied</code> / <code>invalid_quantity</code></td>
+          </tr>
+          <tr>
+            <td>坏了</td>
+            <td>硬停</td>
+            <td>默认拒绝</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>决策与结果</h2>
+    <div class="split">
+      <div>
+        <h3>GuardrailDecision</h3>
+<pre><code>{
+  "allowed": false,
+  "code": "permission_denied",
+  "message": "单笔最多 10 杯，这次是 11 杯。",
+  "hint": "不要自动拆单绕过；转人工。"
+}</code></pre>
+      </div>
+      <div>
+        <h3>tool_result</h3>
+<pre><code>{
+  "tool_use_id": "call_2",
+  "is_error": true,
+  "content": {
+    "ok": false,
+    "error": {
+      "code": "permission_denied",
+      "message": "...",
+      "hint": "..."
+    }
+  }
+}</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>接线位置</h2>
+<pre><code>def run_guarded(call, tools, guardrails):
+    decision = guardrails.check(call)
+
+    if not decision.allowed:
+        return denied_result(call, decision)
+
+    return tools.run(call)</code></pre>
+    <p>只有放行才调用 <code>tools.run</code>。拒绝时工具函数一次都不执行；模型收到 <code>permission_denied</code>，而不是“工具失败”。</p>
+  </section>
+
+  <section>
+    <h2>护栏检查清单</h2>
+    <ul>
+      <li><strong>代码级</strong>：不是提示词里的“请不要”。</li>
+      <li><strong>执行前</strong>：工具动手之前检查。</li>
+      <li><strong>只回答能 / 不能</strong>：一条护栏一个判断，不写“尽量”。</li>
+      <li><strong>拒绝有结果</strong>：<code>permission_denied</code> + message + hint。</li>
+      <li><strong>失败关闭</strong>：护栏自己抛异常，默认拒绝。</li>
+      <li><strong>不可绕过</strong>：不自动拆单、不换工具、不假装成功。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>本课已知的洞：拆单</h2>
+    <p>单笔限 10 杯，模型拆成两单各 10 杯：两条护栏各自都通过，合计 20 杯。护栏只看自己收到的这一张单，看不到 session 总量。</p>
+    <p><strong>修法：</strong>把已下单总量放进 session 状态，护栏检查“已有 + 本次”；这就是下一课的事。</p>
+  </section>
+
+  <section>
+    <h2>常见 Bug</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>症状</th>
+            <th>根因</th>
+            <th>修复</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>模型照做超量订单</td>
+            <td>店规只在提示词里</td>
+            <td>工具执行前加代码护栏</td>
+          </tr>
+          <tr>
+            <td>原料已经用了才拒绝</td>
+            <td>做完才检查</td>
+            <td>先过店规，再执行</td>
+          </tr>
+          <tr>
+            <td>对话卡死</td>
+            <td>拒绝时抛异常</td>
+            <td>回 <code>permission_denied</code> 结果</td>
+          </tr>
+          <tr>
+            <td>护栏坏了反而放行</td>
+            <td>fail open</td>
+            <td>捕获异常，默认拒绝</td>
+          </tr>
+          <tr>
+            <td>拆两单绕过</td>
+            <td>只看单笔</td>
+            <td>session 级总量规则</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>术语</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>术语</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>guardrail</td>
+            <td>工具执行前的代码级否决。</td>
+          </tr>
+          <tr>
+            <td>fail closed</td>
+            <td>护栏自己坏了时默认拒绝，而不是放行。</td>
+          </tr>
+          <tr>
+            <td><code>permission_denied</code></td>
+            <td>护栏拒绝的错误码，模型可读、可解释。</td>
+          </tr>
+          <tr>
+            <td>拆单</td>
+            <td>把超量订单拆成多笔，绕过单笔上限。</td>
+          </tr>
+          <tr>
+            <td>session 级规则</td>
+            <td>看整段会话总量，而不是单次调用。</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>一手来源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents · Factor 7 &amp; 8</a></p>
+    <p class="ask">每次加店规，回来对一遍：写在哪？什么时候检查？拒绝后模型看到什么？能不能绕过？</p>
+  </footer>
+
+</main>
+</body>
+</html>
