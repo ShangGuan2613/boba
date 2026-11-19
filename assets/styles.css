@@ -531,6 +531,45 @@ tbody tr:hover { background: var(--milk-2); }
   white-space: nowrap;
 }
 
+/* Flow diagram */
+
+.flow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  margin: 20px 0;
+  flex-wrap: wrap;
+}
+
+.flow-step {
+  flex: 1 1 120px;
+  padding: 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--card);
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.flow-step strong {
+  display: block;
+  font-size: 0.86rem;
+}
+
+.flow-step span { color: var(--tea-soft); }
+
+.flow-arrow {
+  align-self: center;
+  color: var(--caramel);
+  font-size: 1.1rem;
+}
+
+@media (max-width: 620px) {
+  .flow-arrow { display: none; }
+}
+
 /* Scenario switcher */
 
 .scenario {

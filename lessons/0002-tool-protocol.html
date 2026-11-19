@@ -150,32 +150,87 @@
   </section>
 
   <section>
-    <h2>4. 代码：把异常关进边界</h2>
-    <p>关键不是“多写几个 if”，而是让<strong>所有工具执行都经过同一个入口</strong>。未知工具在 registry 里处理：</p>
+    <h2>4. 后厨窗口：一张单子的旅程</h2>
+    <p>把 Harness 想成店里的<strong>后厨窗口</strong>。前台店员（模型）把顾客的需求写成一张点单，递进窗口；窗口后面的师傅（工具）负责做。前台只负责判断和说话，不亲自进后厨；真正动手的是窗口后面的师傅。窗口不能把单子吞掉，也不能把烧焦的锅直接扔到前台。</p>
+    <p>它只做一件事：<strong>接单，回小票。</strong></p>
 
-<pre><code>class ToolRegistry:
-    def run(self, call):
+    <div class="flow">
+      <div class="flow-step"><strong>前台</strong><span>写一张点单</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>后厨窗口</strong><span>查菜单、查单子</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>师傅</strong><span>照配方做</span></div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step"><strong>小票</strong><span>回到前台</span></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>店里的话</th>
+            <th>代码里的话</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>一张点单：单号、菜名、规格</td>
+            <td><code>ToolCall(id, name, args)</code></td>
+          </tr>
+          <tr>
+            <td>回执小票：同一个单号、做没做成、原因</td>
+            <td><code>ToolResult(tool_use_id, content, is_error)</code></td>
+          </tr>
+          <tr>
+            <td>后厨窗口：所有单子的唯一入口</td>
+            <td><code>ToolRegistry</code></td>
+          </tr>
+          <tr>
+            <td>窗口师傅：照着配方做</td>
+            <td><code>Tool.run</code></td>
+          </tr>
+          <tr>
+            <td>配方卡：要什么料、哪些必须写</td>
+            <td><code>Tool</code> 的 <code>required</code> / <code>properties</code></td>
+          </tr>
+          <tr>
+            <td>退单原因：哪一步没过、怎么办</td>
+            <td><code>error_content(code, message, hint)</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>窗口接过一张单子，只查三件事：</p>
+    <ol>
+      <li><strong>菜单上有这道菜吗？</strong>没有 → 退单，写 <code>unknown_tool</code>。</li>
+      <li><strong>单子写全了吗？</strong>缺冰量、糖度 → 退单，写 <code>missing_argument</code>。</li>
+      <li><strong>师傅做的时候机器坏了吗？</strong>坏了 → 退单，写 <code>tool_failed</code>。</li>
+    </ol>
+    <p>三道里任何一道没过，窗口都要回一张小票。不是关窗，不是沉默，不是把异常扔到前台。</p>
+
+<pre><code>class ToolRegistry:                  # 后厨窗口
+    def run(self, call):             # 接一张单
         tool = self._tools.get(call.name)
-        if tool is None:
+        if tool is None:             # 菜单上没有这道菜
             return self._error(call, "unknown_tool", ...)
 
-        content = tool.run(call.args)
-        return ToolResult(call.id, content, is_error=not content["ok"])</code></pre>
+        content = tool.run(call.args)  # 师傅照配方做
+        return ToolResult(call.id, content, is_error=not content["ok"])  # 回小票</code></pre>
 
-    <p>参数校验和异常捕获在工具边界内处理：</p>
-
-<pre><code>class Tool:
-    def run(self, args):
+<pre><code>class Tool:                          # 一张配方卡
+    def run(self, args):             # 师傅动手
         missing = [k for k in self.required if k not in args]
-        if missing:
+        if missing:                  # 单子没写冰量
             return error_content("missing_argument", ...)
 
         try:
             return {"ok": True, "data": self.fn(**args)}
-        except Exception as exc:
+        except Exception as exc:     # 封口机卡住
             return error_content("tool_failed", ...)</code></pre>
 
-    <p>这里的 <code>except Exception</code> 不是“吞异常”。它只守在工具边界，把失败<strong>转换成模型能读的结果</strong>；在完整 Harness 里，同一处还会写 trace。它不捕获 <code>BaseException</code>，所以 Ctrl-C 仍然能停。</p>
+    <p><strong>为什么异常不能扔出窗口？</strong>如果师傅把烧焦的锅直接扔到前台，前台只会被烫到，顾客什么也听不到。这里的 <code>except</code> 不是把故障藏起来，而是把故障写在退单小票上：哪台机器、什么原因、建议怎么办。前台才能转头对顾客说人话。</p>
+    <p>它只接住“做坏了”的 <code>Exception</code>，不接住“关店 / 停电”级别的 <code>BaseException</code>——所以 Ctrl-C 仍然能停。</p>
 
     <div class="callout">
       <p><strong>完整可运行代码：</strong><code>boba/tool_protocol.py</code>。五个测试覆盖缺参数、未知工具、工具异常、成功和“每个调用恰好一个结果”。在仓库根目录跑：</p>
@@ -184,93 +239,95 @@
   </section>
 
   <section>
-    <h2>5. 错误码是给模型的下一步</h2>
-    <p>同一个 <code>is_error: true</code>，不同 <code>code</code> 对应不同恢复动作。不要把所有失败都写成“未知错误”。</p>
+    <h2>5. 四种小票，四句人话</h2>
+    <p>错误码不是给程序员看的日志，是给前台（模型）看的<strong>下一步提示</strong>。同一张退单小票，写法不同，前台的反应就不同。</p>
 
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>code</th>
-            <th>触发</th>
-            <th>模型应当</th>
+            <th>小票上写</th>
+            <th>前台对顾客说</th>
+            <th>前台不能做</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><code>missing_argument</code></td>
-            <td>必填参数没给</td>
-            <td>问顾客缺的那一项</td>
+            <td><code>missing_argument</code><br>“order_create 缺少 size, ice, sugar”</td>
+            <td>“您要中杯还是大杯？冰量、糖度呢？”</td>
+            <td>自己猜“中杯少冰三分糖”</td>
           </tr>
           <tr>
-            <td><code>unknown_argument</code></td>
-            <td>给了工具没声明的参数</td>
-            <td>删掉或改正参数后重发</td>
+            <td><code>unknown_tool</code><br>“没有注册工具：get_discount”</td>
+            <td>“目前没有会员折扣，要不要看看今天的第二杯半价？”</td>
+            <td>原样再喊一次“get_discount”</td>
           </tr>
           <tr>
-            <td><code>unknown_tool</code></td>
-            <td>调用了未注册的工具</td>
-            <td>改用已注册工具，或告知做不到</td>
+            <td><code>tool_failed</code><br>“inventory_check 失败：冰箱传感器离线”</td>
+            <td>“稍等，我确认一下库存。”</td>
+            <td>假装库存正常，直接下单</td>
           </tr>
           <tr>
-            <td><code>tool_failed</code></td>
-            <td>工具内部抛异常</td>
-            <td>告知稍等，必要时换只读工具</td>
-          </tr>
-          <tr>
-            <td><code>permission_denied</code> <span class="tag">后续</span></td>
-            <td>护栏否决</td>
-            <td>解释规则，不要绕过</td>
-          </tr>
-          <tr>
-            <td><code>budget_exhausted</code> <span class="tag">后续</span></td>
-            <td>轮数 / 调用数 / 时间耗尽</td>
-            <td>停止并交接，不要继续试</td>
+            <td><code>ok: true</code><br>“B1001 中杯少冰三分糖 12 元”</td>
+            <td>“中杯少冰三分糖，12 元，大约 6 分钟。”</td>
+            <td>再多问一遍已经答过的规格</td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <div class="callout callout--key">
+      <p><strong>退单小票的三段式：</strong><code>code</code> 是暗号，<code>message</code> 是事实，<code>hint</code> 是下一步。只写“出错了”，前台只能干瞪眼。</p>
+    </div>
+
+    <p>后面还会遇到两种退单：<code>permission_denied</code>（店规不让做，比如“未成年人不能买酒”）和 <code>budget_exhausted</code>（打烊时间到了）。处理原则一样：<strong>写清楚原因和下一步，不让前台猜。</strong></p>
   </section>
 
   <section>
-    <h2>6. 奶茶店 ↔ 协议</h2>
+    <h2>6. 窗口不守规矩，店里会怎样</h2>
+    <p>协议不是为了好看。每一条规矩，都对应一个会真实发生的差评。</p>
+
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
+            <th>窗口偷的懒</th>
             <th>店里发生什么</th>
-            <th>协议里是什么</th>
-            <th>正确处理</th>
+            <th>顾客看到什么</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>顾客点单没说冰量</td>
-            <td><code>missing_argument</code></td>
-            <td>店员问“冰的还是热的？”</td>
+            <td>单子没写冰量，师傅自己猜</td>
+            <td>顾客要热饮，拿到冰的</td>
+            <td>“我不是说了热的吗？”</td>
           </tr>
           <tr>
-            <td>顾客点了菜单上没有的配方</td>
-            <td><code>unknown_tool</code></td>
-            <td>“菜单上没有这个”，不硬做</td>
+            <td>菜单没有的菜，硬做</td>
+            <td>做不出来，或者用了不该用的料</td>
+            <td>等半天，最后退单</td>
           </tr>
           <tr>
-            <td>封口机卡住</td>
-            <td><code>tool_failed</code></td>
-            <td>“稍等，我看一下”，不假装成功</td>
+            <td>封口机卡住，假装做好了</td>
+            <td>漏杯、洒袋</td>
+            <td>拿到一杯漏的</td>
           </tr>
           <tr>
-            <td>小票和杯子对不上</td>
-            <td><code>tool_use_id</code> 不匹配</td>
-            <td>出杯给错人；必须在回填时配对</td>
+            <td>小票单号写错</td>
+            <td>出杯给错人</td>
+            <td>等不到，或被别人拿走</td>
           </tr>
           <tr>
-            <td>一出错就直接关店</td>
-            <td>异常逃出循环</td>
-            <td>顾客被晾着；必须转成结果</td>
+            <td>把异常直接扔出窗口</td>
+            <td>前台被烫，循环崩掉</td>
+            <td>没人理，对话结束</td>
           </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="callout callout--key">
+      <p><strong>窗口口诀：</strong>接单看单号，做前查菜单，缺项问顾客，坏了写退单，小票回前台。</p>
     </div>
   </section>
 
@@ -278,52 +335,53 @@
     <h2>7. 检查理解</h2>
     <p>先合上上面的内容，凭记忆选。</p>
 
-    <div class="quiz" data-answer="1" data-hint="再想一步：循环不能因为一次工具失败就停。" data-explanation="工具异常要在工具边界被转换成 ToolResult，is_error=true，再由模型决定下一步。">
-      <p class="question">1. 工具函数抛异常，Harness 应该？</p>
+    <div class="quiz" data-answer="1" data-hint="再想一步：循环不能因为一次工具失败就停。" data-explanation="工具异常要在窗口边界被转换成 ToolResult，is_error=true；前台才能决定问顾客、换工具，还是停。">
+      <p class="question">1. 封口机卡住，后厨窗口应该？</p>
       <div class="options">
-        <button class="option" type="button">直接让进程崩溃</button>
-        <button class="option" type="button">回填错误给模型</button>
-        <button class="option" type="button">重试到成功为止</button>
+        <button class="option" type="button">把异常扔给前台</button>
+        <button class="option" type="button">回一张退单小票</button>
+        <button class="option" type="button">假装已经做好了</button>
       </div>
       <p class="feedback" aria-live="polite"></p>
     </div>
 
-    <div class="quiz" data-answer="2" data-hint="再想一步：配对靠的是调用 id，不是订单号。" data-explanation="tool_use_id 必须和请求完全一致；否则结果对不上单，模型会把 A 的结果当成 B 的。">
-      <p class="question">2. 哪个字段让 tool_result 和请求配对？</p>
+    <div class="quiz" data-answer="2" data-hint="再想一步：配对靠的是单号，不是会员号。" data-explanation="tool_use_id 必须和点单上的单号完全一致；否则 A 单的结果会被当成 B 单，出杯给错人。">
+      <p class="question">2. 小票上哪个号码必须和点单一致？</p>
       <div class="options">
-        <button class="option" type="button">顾客订单编号</button>
-        <button class="option" type="button">门店会话编号</button>
-        <button class="option" type="button">工具调用编号</button>
+        <button class="option" type="button">顾客会员号</button>
+        <button class="option" type="button">门店排队号</button>
+        <button class="option" type="button">工具调用号</button>
       </div>
       <p class="feedback" aria-live="polite"></p>
     </div>
 
     <div class="quiz" data-answer="1" data-hint="再想一步：缺参数时最该补的是信息。" data-explanation="missing_argument 的正确恢复是问顾客，不是猜默认值；猜出来的订单可能不是顾客想要的。">
-      <p class="question">3. 模型收到 missing_argument 后最该做什么？</p>
+      <p class="question">3. 单子没写冰量，前台最该做什么？</p>
       <div class="options">
         <button class="option" type="button">猜一个默认值</button>
-        <button class="option" type="button">问顾客缺什么</button>
-        <button class="option" type="button">换个工具重试</button>
+        <button class="option" type="button">问顾客要什么</button>
+        <button class="option" type="button">换一家店重试</button>
       </div>
       <p class="feedback" aria-live="polite"></p>
     </div>
   </section>
 
   <section>
-    <h2>8. 这一课故意没做的事</h2>
+    <h2>8. 这一课没修的设备</h2>
     <ul>
-      <li>没有做完整的 JSON Schema 类型 / 枚举校验，只查了必填和未知参数。</li>
-      <li>没有重试和退避——<code>tool_failed</code> 先交回模型，不自动重试。</li>
-      <li>没有错误分类统计，也没有 trace 落盘。</li>
-      <li>没有权限护栏——<code>permission_denied</code> 只占了个位置。</li>
+      <li><strong>没装完整配方校验</strong>：只查了必填和未知参数，还没查类型、枚举、范围。</li>
+      <li><strong>没装自动重做</strong>：<code>tool_failed</code> 先交回前台，不自动重试。</li>
+      <li><strong>没装故障统计</strong>：哪种退单最多，还没统计。</li>
+      <li><strong>没装监控录像</strong>：trace 还没落盘，出事只能靠回忆。</li>
+      <li><strong>没装店规否决</strong>：<code>permission_denied</code> 只占了个位置。</li>
     </ul>
-    <p>下一课：<strong>预算与超时</strong>。如果模型收到错误后永远重试，谁喊停？</p>
+    <p>下一课：<strong>打烊铃</strong>——预算与超时。如果前台收到退单后永远重试，谁喊停？</p>
   </section>
 
   <footer class="lesson-footer">
     <p><strong>主源：</strong><a href="https://www.anthropic.com/engineering/writing-tools-for-agents" rel="noopener">Anthropic · Writing effective tools for agents</a>。重点读“Return meaningful context”和错误处理部分。</p>
     <p><strong>延伸：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a> 的 Factor 4–6：tools are just structured outputs、unify execution state、launch/pause/resume。</p>
-    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：如果你觉得 <code>unknown_tool</code> 应该自动重试，或者 <code>except Exception</code> 仍然是吞异常，直接说——下一课就从分歧开始。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：后厨窗口这个比喻哪里不成立？如果你觉得 <code>unknown_tool</code> 应该自动重试，或者 <code>except Exception</code> 仍然是吞异常，直接说——下一课就从分歧开始。</p>
   </footer>
 
 </main>
