@@ -28,7 +28,9 @@
 | 02 | 工具协议：参数、错误、未知工具 | 已 review |
 | 03 | 打烊铃：预算与超时 | 已 review |
 | 04 | 店规：护栏 | 已 review |
-| 05 | 小票与订单夹：状态 / session | 已 review，补课已加 |
+| 05 | 小票与订单夹：状态 / session | 已 review |
+| 06 | 监控录像：trace 与 eval | 可 review |
+| 07 | 并发与状态生命周期 | 暂缓 |
 
 学习进程详见 `PROGRESS.md`。
 

@@ -322,89 +322,20 @@ class SessionState:
     <h2>7. 这一课没修的设备</h2>
     <ul>
       <li><strong>持久化</strong>：订单夹现在只在内存里，进程一重启就没了；真实店铺要落库。</li>
-      <li><strong>并发</strong>：两桌同时下单时，“读合计 → 检查 → 写入”可能撞车；需要事务、锁或原子更新。</li>
+      <li><strong>并发与归档</strong>：多台收银机同时下单、状态持久化与归档，留到后续课。</li>
       <li><strong>订单号</strong>：示例里的 <code>order_create</code> 永远返回 <code>B1001</code>；真实系统要生成唯一订单号。</li>
       <li><strong>状态增长</strong>：订单夹会越来越长；需要归档、摘要和只读查询，不能整本塞回模型上下文。</li>
       <li><strong>只读查询工具</strong>：<code>order_status</code> 还没注册；本课只验证了 <code>SessionState.find_order</code> 的隔离。</li>
       <li><strong>权限分级</strong>：现在只按桌号隔离；店员查单、店长看报表是另一种授权模型。</li>
       <li><strong>审计</strong>：状态变化还没写进 trace，出了纠纷无法还原“谁在什么时候改了什么”。</li>
     </ul>
-    <p>下一课：<strong>监控与复盘</strong>——trace / eval。把每一张单、每一次拒绝、每一次状态变化都记下来。</p>
-  </section>
-
-  <section>
-    <h2>8. 补课：并发与归档（现在不用写代码）</h2>
-    <p>这两个问题不是第 5 课的必答题，是店里忙起来、系统上线后才会碰到的。先用店里的话讲清楚，代码以后再加。</p>
-
-    <h3>两桌同时下单：为什么 15 杯会卖成 20 杯</h3>
-    <p>3 号桌和 5 号桌同时各要 10 杯，冰箱里只剩 15 杯。两台收银机同时处理：</p>
-
-<pre><code>时间   3 号桌                    5 号桌
-t1     读到库存 15
-t2                              读到库存 15
-t3     15 - 10 = 5，够
-t4                              15 - 10 = 5，够
-t5     扣 10，库存剩 5
-t6                              扣 10，库存剩 -5</code></pre>
-
-    <p>两边都觉得自己算对了，因为读的时候都是 15。问题不在算术，在<strong>“读 → 检查 → 写”中间被别人插队了</strong>。这就是并发下的竞态条件（race condition）。</p>
-
-    <p><strong>锁是什么？</strong>把库存夹想成只有一份的实物：谁拿着，谁才能读和改；另一个人只能在旁边等。等第一个人写完放回去，第二个人再拿。这样就不会两个人同时看到 15。</p>
-
-    <p><strong>死锁是什么？</strong>3 号桌拿着桌号锁，等库存锁；5 号桌拿着库存锁，等 3 号桌的桌号锁。两个人都不肯先放手，永远等下去。避免的办法不是“谁更重要”，而是<strong>所有代码按同一个顺序拿锁</strong>；或者干脆用数据库的一条原子语句扣库存：</p>
-
-<pre><code>UPDATE inventory
-SET stock = stock - 10
-WHERE item = 'boba_milk_tea'
-  AND stock &gt;= 10;</code></pre>
-
-    <p>这条语句把“读、检查、扣减”合成一个动作，中间不会被人插队。至于“先锁库存还是先锁桌号”，没有唯一答案；如果一定要选，先锁共享资源（库存），再锁本地资源（桌号），并且全店统一这个顺序。当前代码是单线程演示，不需要加锁；等有多台收银机时再补。</p>
-
-    <h3>打烊收夹子：归档后还算不算？</h3>
-    <p>现在的订单夹只在内存里，进程一重启就没了。<strong>持久化</strong>就是把夹子放进档案柜（数据库 / 文件）；<strong>归档</strong>是客人走了，把旧夹子从柜台收进档案柜，柜台换一本新的。</p>
-
-    <p>关键问题不是“归档要不要保留”，而是：<strong>“最多 10 杯”这条店规，管的是哪一段？</strong></p>
-
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>店规的范围</th>
-            <th>session 该用什么身份</th>
-            <th>归档后怎么算</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>这一次点单 / 这一桌</td>
-            <td>桌号；客人走了就换新 session</td>
-            <td>旧夹子归档，新夹子从 0 开始；这是规则，不是漏洞</td>
-          </tr>
-          <tr>
-            <td>这个人今天</td>
-            <td>会员号 / 手机号 + 日期</td>
-            <td>不能只归档；要保留当天的汇总，或回查当天订单</td>
-          </tr>
-          <tr>
-            <td>这个人永久</td>
-            <td>会员号</td>
-            <td>要长期保存累计；归档只移明细，汇总必须留下</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="callout callout--key">
-      <p><strong>一句话：规则的范围，必须和 session 的身份一致。</strong>用桌号当身份，换桌就会重置；要按人限购，就得用会员号做 key，或者查当天的汇总。否则不是护栏坏了，是护栏管错了对象。</p>
-    </div>
-
-    <p>如果归档后还要算总量，常见做法有两种：<strong>保留一行汇总</strong>（总杯数、日期、状态，便宜）或<strong>按需回查归档明细</strong>（准确但慢）。不能既把旧订单归档，又假装它们没发生过。</p>
+    <p>下一课：<strong><a href="0006-trace.html">监控与复盘</a></strong>——trace / eval。把每一张单、每一次拒绝、每一次状态变化都记下来。</p>
   </section>
 
   <footer class="lesson-footer">
     <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents</a>，重点读 Factor 5 “Unify execution state and business state”。订单夹就是业务状态，不能只活在模型的上下文里。</p>
     <p><strong>延伸：</strong><a href="https://www.anthropic.com/engineering/building-effective-agents" rel="noopener">Anthropic · Building Effective Agents</a>，看“状态与上下文分开”如何影响多轮任务的可靠性。</p>
-    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：你觉得订单夹应该由工具自己写，还是由 Harness 统一提交？如果两桌同时下单，先锁桌号还是先锁库存？下一课从你的选择开始。</p>
+    <p class="ask"><strong>把你的判断发给我。</strong>尤其是：你觉得订单夹应该由工具自己写，还是由 Harness 统一提交？下一课从你的选择开始。</p>
   </footer>
 
 </main>

@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference · trace 与 eval 速查</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<main class="reference">
+
+  <header class="lesson-header">
+    <p class="eyebrow">Boba · Reference</p>
+    <h1>trace 与 eval 速查</h1>
+    <p class="lede">一页纸：一行一件事、状态怎么收尾、eval 怎么把录像变成回归。</p>
+    <p class="meta"><a href="../lessons/0006-trace.html">← Lesson 06</a> · <a href="../lessons/0005-session.html">Lesson 05</a> · <a href="harness-map.html">Harness 地图</a></p>
+  </header>
+
+  <section>
+    <h2>一句话</h2>
+    <div class="formula">
+      <span class="model">trace 记录事实</span>
+      <span class="plus">→</span>
+      <span class="harness">eval 回归事实</span>
+    </div>
+    <p><strong>trace 解决“这一次发生了什么”；eval 解决“下一次还会不会坏”。</strong>没有 <code>run.end</code> 的 trace，状态是 <code>incomplete</code>，这本身就是信号。</p>
+  </section>
+
+  <section>
+    <h2>事件形状</h2>
+<pre><code>{
+  "seq": 3,
+  "ts": 1.2,
+  "run_id": "run_20261119_001",
+  "type": "tool.call",
+  "data": {
+    "tool": "order_create",
+    "quantity": 10
+  }
+}</code></pre>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>字段</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>seq</code></td><td>顺序；排障时按它定位。</td></tr>
+          <tr><td><code>ts</code></td><td>时间；算耗时、看重试间隔。</td></tr>
+          <tr><td><code>run_id</code></td><td>把同一次运行的事件串起来。</td></tr>
+          <tr><td><code>type</code></td><td>事件类型，如 <code>run.start</code>、<code>tool.call</code>、<code>run.end</code>。</td></tr>
+          <tr><td><code>data</code></td><td>细节；一行只放一个事实的相关字段。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>常见事件类型</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>type</th>
+            <th>什么时候写</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>run.start</code></td><td>一次运行开始，记录用户输入 / session。</td></tr>
+          <tr><td><code>model.turn</code></td><td>模型输出一轮（文本或 tool_use）。</td></tr>
+          <tr><td><code>tool.call</code></td><td>准备执行工具，记录工具名和参数。</td></tr>
+          <tr><td><code>tool.result</code></td><td>工具返回，记录 <code>is_error</code> 和结果摘要。</td></tr>
+          <tr><td><code>guardrail.denied</code></td><td>护栏拒绝，记录 code 和原因。</td></tr>
+          <tr><td><code>state.write</code></td><td>状态成功写入，记录变更摘要。</td></tr>
+          <tr><td><code>run.end</code></td><td>运行收尾，记录最终 status。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>收尾状态</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>status</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>ok</code></td><td>正常收尾。</td></tr>
+          <tr><td><code>permission_denied</code></td><td>护栏拒绝；模型可以解释或转人工。</td></tr>
+          <tr><td><code>max_turns</code></td><td>轮数额度用完。</td></tr>
+          <tr><td><code>max_tool_calls</code></td><td>工具调用额度用完。</td></tr>
+          <tr><td><code>timeout</code></td><td>墙钟时间超限。</td></tr>
+          <tr><td><code>incomplete</code></td><td>没有 <code>run.end</code>：崩溃、重启或漏收尾。</td></tr>
+          <tr><td><code>error</code></td><td>其他未分类错误。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>trace vs eval</h2>
+    <div class="split">
+      <div>
+        <h3>trace</h3>
+        <ul>
+          <li>一次运行的事件流</li>
+          <li>只追加，不改写</li>
+          <li>用来排障、审计、回放</li>
+          <li>失败运行必须保留</li>
+        </ul>
+      </div>
+      <div>
+        <h3>eval</h3>
+        <ul>
+          <li>固定用例 + 期望状态</li>
+          <li>每次改动后重跑</li>
+          <li>用来防回归</li>
+          <li>用例来自真实失败 trace</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>落盘与读取</h2>
+<pre><code>trace = Trace("run_1")
+trace.emit("run.start", user="3 号桌")
+trace.emit("run.end", status="ok")
+
+trace.write("traces/run_1.jsonl")
+restored = Trace.read("traces/run_1.jsonl")
+
+restored.status()   # "ok"
+restored.summary()</code></pre>
+    <p>JSONL 一行一个 JSON，便于 <code>grep</code>、按 <code>run_id</code> 过滤和原样回放。</p>
+  </section>
+
+  <section>
+    <h2>常见 Bug</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>症状</th>
+            <th>根因</th>
+            <th>修复</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>出事后无法复盘</td>
+            <td>只记最终结果</td>
+            <td>每个模型轮 / 工具调用 / 拒绝都记事件</td>
+          </tr>
+          <tr>
+            <td>事件顺序错乱</td>
+            <td>并发写、没有 seq</td>
+            <td>单次运行内串行编号；跨运行用 run_id 区分</td>
+          </tr>
+          <tr>
+            <td>状态显示成功</td>
+            <td>漏写 run.end 或默认 ok</td>
+            <td>没有 run.end 就是 incomplete</td>
+          </tr>
+          <tr>
+            <td>trace 被改过</td>
+            <td>覆盖写 / 回填旧事件</td>
+            <td>append-only；修正用新事件</td>
+          </tr>
+          <tr>
+            <td>日志泄密</td>
+            <td>原样落盘手机号、支付信息</td>
+            <td>落盘前脱敏</td>
+          </tr>
+          <tr>
+            <td>修好后又坏</td>
+            <td>没有 eval</td>
+            <td>把失败 trace 变成固定 case</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>术语</h2>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>术语</th>
+            <th>含义</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>trace</td><td>按顺序记录的事件流。</td></tr>
+          <tr><td>event</td><td>trace 里的一行，一个事实。</td></tr>
+          <tr><td>run_id</td><td>一次运行的唯一标识。</td></tr>
+          <tr><td>append-only</td><td>只追加新事件，不改旧事件。</td></tr>
+          <tr><td>JSONL</td><td>一行一个 JSON 的文本格式。</td></tr>
+          <tr><td>eval</td><td>固定用例 + 期望行为的回归集。</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer class="lesson-footer">
+    <p><strong>主源：</strong><a href="https://github.com/humanlayer/12-factor-agents" rel="noopener">12-Factor Agents · Factor 8</a></p>
+    <p class="ask">每次出事故，回来对一遍：trace 有没有这一行？seq 能不能定位？run.end 是什么？有没有对应的 eval？</p>
+  </footer>
+
+</main>
+</body>
+</html>
